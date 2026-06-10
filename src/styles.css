@@ -640,8 +640,90 @@ textarea:focus,
   white-space: pre-wrap;
 }
 
-.answer-block.answer p {
+.answer-block.answer p,
+.markdown-content {
   color: #0f172a;
+}
+
+.markdown-content {
+  overflow-x: auto;
+}
+
+.markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content p,
+.markdown-content li {
+  color: #0f172a;
+  line-height: 1.62;
+}
+
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol,
+.markdown-content table,
+.markdown-content pre {
+  margin: 0 0 14px;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 22px;
+}
+
+.markdown-content table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  font-size: 0.94rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border-bottom: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-content th {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 850;
+}
+
+.markdown-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown-content code {
+  border-radius: 6px;
+  background: #f1f5f9;
+  padding: 2px 5px;
+  color: #0f172a;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  overflow-x: auto;
+  border-radius: 8px;
+  background: #0f172a;
+  padding: 12px;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  color: #e2e8f0;
 }
 
 .tag-row {

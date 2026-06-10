@@ -1,43 +1,44 @@
 # Interview Handbook
 
-Website tong hop cau hoi phong van, toi uu de deploy bang GitHub Pages va dung
-Firebase Firestore o free tier.
+A GitHub Pages-friendly website for organizing interview questions by category,
+with Firebase Firestore as the database.
 
-## Tinh nang
+## Features
 
-- Tao category rieng, sau do them question/answer vao category do.
-- Chinh sua va xoa category rong.
-- Chon category de load va tim kiem cac cau hoi thuoc category.
-- Tim kiem full text theo question va answer.
-- Xem cau hoi va cau tra loi trong panel rieng de on tap nhanh.
-- Chinh sua category cua question, noi dung question va answer.
-- Danh dau favorite bang localStorage.
-- Them cau hoi moi. Khi chua cau hinh Firebase, du lieu se luu local trong trinh duyet.
-- Khi da cau hinh Firebase, app doc/ghi collection `questions` tren Firestore.
-- GitHub Actions workflow da san sang deploy len GitHub Pages.
+- Create categories, then add question/answer entries into each category.
+- Edit and delete empty categories.
+- Browse and search questions by category.
+- Search full text across question and answer content.
+- View questions and answers in a focused reading panel.
+- Answers support Markdown, including comparison tables.
+- Edit a question's category, question text, and answer text.
+- Delete questions with confirmation.
+- Mark questions as favorites in localStorage.
+- Use localStorage fallback when Firebase is not configured.
+- Deploy to GitHub Pages through GitHub Actions.
 
-## Chay local
+## Local Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Build production:
+Production build:
 
 ```bash
 npm run build
 ```
 
-## Cau hinh Firebase
+## Firebase Setup
 
-1. Tao Firebase project.
-2. Tao Web App trong Firebase Console.
-3. Bat Firestore Database.
-4. Copy `.env.example` thanh `.env.local`.
-5. Dien cac bien `VITE_FIREBASE_*` tu Firebase web config.
+1. Create a Firebase project.
+2. Create a Web App in Firebase Console.
+3. Enable Firestore Database.
+4. Copy `.env.example` to `.env.local`.
+5. Fill the `VITE_FIREBASE_*` variables from your Firebase web config.
 
-Vi du:
+Example:
 
 ```bash
 VITE_FIREBASE_API_KEY=...
@@ -48,14 +49,14 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 ```
 
-App se doc 2 collection:
+The app reads two collections:
 
 ```text
 categories
 questions
 ```
 
-Document trong `categories`:
+Document in `categories`:
 
 ```json
 {
@@ -65,28 +66,28 @@ Document trong `categories`:
 }
 ```
 
-Document trong `questions`:
+Document in `questions`:
 
 ```json
 {
   "categoryId": "<category document id>",
-  "question": "Hay giai thich event loop...",
-  "answer": "Node.js chay JavaScript tren main thread...",
+  "question": "Explain the Java event loop...",
+  "answer": "JavaScript runs on a main thread...",
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }
 ```
 
-File `firestore.rules` trong repo co rule mau: cho public read va chi cho create
-voi schema hop le. Neu website cua ban can quyen admin/editor that su, nen them
-Firebase Authentication va sua rule theo user role.
+The `firestore.rules` file contains starter rules for public read and basic
+schema validation. If this becomes a real multi-user app, add Firebase
+Authentication and role-based rules.
 
-## Deploy GitHub Pages
+## GitHub Pages Deploy
 
-1. Push code len branch `main`.
-2. Vao GitHub repository settings.
-3. Pages -> Build and deployment -> Source: `GitHub Actions`.
-4. Them repository secrets:
+1. Push code to the `main` branch.
+2. Open GitHub repository settings.
+3. Go to Pages -> Build and deployment -> Source: `GitHub Actions`.
+4. Add repository secrets:
 
 ```text
 VITE_FIREBASE_API_KEY
@@ -97,9 +98,9 @@ VITE_FIREBASE_MESSAGING_SENDER_ID
 VITE_FIREBASE_APP_ID
 ```
 
-Workflow `.github/workflows/deploy.yml` se build app va deploy folder `dist`.
-Vite config tu dong dung base path `/<ten-repo>/`, nen repo nay se phu hop voi
-GitHub Pages URL dang:
+The workflow `.github/workflows/deploy.yml` builds the app and deploys `dist`.
+The Vite config automatically uses the repository name as the GitHub Pages base
+path, so this repository works with a URL like:
 
 ```text
 https://<username>.github.io/Interview-Handbook/

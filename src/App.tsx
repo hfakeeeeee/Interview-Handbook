@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   BookOpen,
   CheckCircle2,
@@ -42,6 +44,14 @@ const emptyQuestionDraft: QuestionDraft = {
 const emptyCategoryDraft: CategoryDraft = {
   name: "",
 };
+
+function MarkdownContent({ value }: { value: string }) {
+  return (
+    <div className="markdown-content">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+    </div>
+  );
+}
 
 export default function App() {
   const [categories, setCategories] = useState<Category[]>(() => loadLocalCategories());
@@ -168,7 +178,7 @@ export default function App() {
     };
 
     if (!nextDraft.name) {
-      setStatus("Category name la bat buoc");
+      setStatus("Category name is required");
       return;
     }
 
@@ -212,7 +222,7 @@ export default function App() {
     };
 
     if (!nextDraft.categoryId || !nextDraft.question || !nextDraft.answer) {
-      setStatus("Category, question va answer la bat buoc");
+      setStatus("Category, question, and answer are required");
       return;
     }
 
@@ -435,7 +445,7 @@ export default function App() {
                 <input
                   value={categoryDraft.name}
                   onChange={(event) => setCategoryDraft({ name: event.target.value })}
-                  placeholder="VD: Frontend, Backend, System Design..."
+                  placeholder="Example: Frontend, Backend, System Design..."
                 />
               </label>
 
@@ -497,7 +507,7 @@ export default function App() {
                     setQuestionDraft({ ...questionDraft, question: event.target.value })
                   }
                   rows={4}
-                  placeholder="Nhap cau hoi can on tap"
+                  placeholder="Enter the interview question"
                 />
               </label>
 
@@ -509,7 +519,7 @@ export default function App() {
                     setQuestionDraft({ ...questionDraft, answer: event.target.value })
                   }
                   rows={8}
-                  placeholder="Nhap cau tra loi, y chinh, vi du, trade-off..."
+                  placeholder="Enter the answer, key points, examples, trade-offs..."
                 />
               </label>
 
@@ -729,7 +739,7 @@ export default function App() {
                   <CheckCircle2 size={18} aria-hidden="true" />
                   Answer
                 </div>
-                <p>{selectedQuestion.answer}</p>
+                <MarkdownContent value={selectedQuestion.answer} />
               </div>
             </>
           ) : (
