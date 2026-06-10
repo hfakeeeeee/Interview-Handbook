@@ -33,6 +33,28 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+button:active {
+  transform: translateY(1px) scale(0.99);
+}
+
 h1,
 h2,
 h3,
@@ -255,12 +277,19 @@ textarea:focus,
 
 .primary-button:hover {
   background: #1d4ed8;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
 }
 
 .secondary-button {
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #334155;
+}
+
+.secondary-button:hover,
+.icon-button:hover,
+.star-button:hover {
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
 }
 
 .icon-button,
@@ -305,6 +334,7 @@ textarea:focus,
   padding: 22px;
   background: rgba(15, 23, 42, 0.38);
   backdrop-filter: blur(4px);
+  animation: fade-in 160ms ease both;
 }
 
 .modal-panel {
@@ -316,6 +346,7 @@ textarea:focus,
   background: #ffffff;
   padding: 18px;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+  animation: modal-enter 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .compact-modal {
@@ -389,6 +420,10 @@ textarea:focus,
   color: #1d4ed8;
 }
 
+.category-chip:hover {
+  transform: translateY(-1px);
+}
+
 .category-chip span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -420,6 +455,23 @@ textarea:focus,
 .question-list {
   display: grid;
   gap: 8px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.pagination span {
+  color: #64748b;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .question-card {
@@ -582,6 +634,38 @@ textarea:focus,
   line-height: 1.55;
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
 @media (max-width: 1060px) {
   .toolbar {
     grid-template-columns: 1fr;
@@ -620,6 +704,11 @@ textarea:focus,
 
   .category-strip {
     grid-template-columns: 1fr;
+  }
+
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .modal-backdrop {

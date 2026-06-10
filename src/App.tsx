@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   BookOpen,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Database,
   FileQuestion,
   Folder,
@@ -25,6 +27,7 @@ import {
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "./types";
 
 const ALL_CATEGORIES_ID = "all";
+const QUESTIONS_PER_PAGE = 10;
 
 const emptyQuestionDraft: QuestionDraft = {
   categoryId: "",
@@ -42,6 +45,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteIds());
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
@@ -127,12 +131,29 @@ export default function App() {
   const selectedQuestion =
     filteredQuestions.find((item) => item.id === selectedId) ?? filteredQuestions[0] ?? null;
 
+  const totalPages = Math.max(1, Math.ceil(filteredQuestions.length / QUESTIONS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (safeCurrentPage - 1) * QUESTIONS_PER_PAGE;
+  const pagedQuestions = filteredQuestions.slice(pageStartIndex, pageStartIndex + QUESTIONS_PER_PAGE);
+  const visibleStart = filteredQuestions.length ? pageStartIndex + 1 : 0;
+  const visibleEnd = Math.min(pageStartIndex + QUESTIONS_PER_PAGE, filteredQuestions.length);
+
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
   const hasSearch = search.trim().length > 0;
   const activeCategoryName =
     selectedCategoryId === ALL_CATEGORIES_ID
       ? "All categories"
       : categoryById.get(selectedCategoryId) ?? "Uncategorized";
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, selectedCategoryId]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   async function handleCategorySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -455,45 +476,78 @@ export default function App() {
               <p className="eyebrow">{activeCategoryName}</p>
               <h2>Questions</h2>
             </div>
-            <span className="match-count">{filteredQuestions.length}</span>
+            <span className="match-count">
+              {visibleStart}-{visibleEnd} / {filteredQuestions.length}
+            </span>
           </div>
 
           {filteredQuestions.length ? (
-            <div className="question-list">
-              {filteredQuestions.map((item, index) => {
-                const isSelected = selectedQuestion?.id === item.id;
-                const isFavorite = favorites.has(item.id);
+            <>
+              <div className="question-list">
+                {pagedQuestions.map((item, index) => {
+                  const isSelected = selectedQuestion?.id === item.id;
+                  const isFavorite = favorites.has(item.id);
 
-                return (
-                  <article
-                    className={isSelected ? "question-card selected" : "question-card"}
-                    key={item.id}
+                  return (
+                    <article
+                      className={isSelected ? "question-card selected" : "question-card"}
+                      key={item.id}
+                    >
+                      <button
+                        className="question-card__main"
+                        type="button"
+                        onClick={() => setSelectedId(item.id)}
+                      >
+                        <span className="card-kicker">
+                          {categoryById.get(item.categoryId) ?? "Uncategorized"} / Question{" "}
+                          {pageStartIndex + index + 1}
+                        </span>
+                        <h3>{item.question}</h3>
+                        <p>{item.answer}</p>
+                      </button>
+
+                      <button
+                        className={isFavorite ? "star-button active" : "star-button"}
+                        type="button"
+                        onClick={() => toggleFavorite(item.id)}
+                        title={isFavorite ? "Remove favorite" : "Add favorite"}
+                        aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                      >
+                        <Star size={18} fill={isFavorite ? "currentColor" : "none"} />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+
+              {totalPages > 1 && (
+                <nav className="pagination" aria-label="Question pagination">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={safeCurrentPage === 1}
                   >
-                    <button
-                      className="question-card__main"
-                      type="button"
-                      onClick={() => setSelectedId(item.id)}
-                    >
-                      <span className="card-kicker">
-                        {categoryById.get(item.categoryId) ?? "Uncategorized"} / Question {index + 1}
-                      </span>
-                      <h3>{item.question}</h3>
-                      <p>{item.answer}</p>
-                    </button>
+                    <ChevronLeft size={16} aria-hidden="true" />
+                    Previous
+                  </button>
 
-                    <button
-                      className={isFavorite ? "star-button active" : "star-button"}
-                      type="button"
-                      onClick={() => toggleFavorite(item.id)}
-                      title={isFavorite ? "Remove favorite" : "Add favorite"}
-                      aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
-                    >
-                      <Star size={18} fill={isFavorite ? "currentColor" : "none"} />
-                    </button>
-                  </article>
-                );
-              })}
-            </div>
+                  <span>
+                    Page {safeCurrentPage} / {totalPages}
+                  </span>
+
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                    disabled={safeCurrentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                </nav>
+              )}
+            </>
           ) : (
             <div className="empty-state">
               <FileQuestion size={34} aria-hidden="true" />
