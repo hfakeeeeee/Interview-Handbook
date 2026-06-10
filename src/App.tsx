@@ -301,103 +301,119 @@ export default function App() {
       </section>
 
       {showCategoryForm && (
-        <section className="editor-panel" aria-label="Create category">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Create</p>
-              <h2>Add category</h2>
-            </div>
-            <button className="icon-button" type="button" onClick={() => setShowCategoryForm(false)}>
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
-
-          <form className="question-form compact-form" onSubmit={handleCategorySubmit}>
-            <label>
-              Category name
-              <input
-                value={categoryDraft.name}
-                onChange={(event) => setCategoryDraft({ name: event.target.value })}
-                placeholder="VD: Frontend, Backend, System Design..."
-              />
-            </label>
-
-            <div className="form-actions">
-              <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(false)}>
-                Cancel
-              </button>
-              <button className="primary-button" type="submit">
-                Save category
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowCategoryForm(false)}>
+          <section
+            className="modal-panel compact-modal"
+            aria-label="Create category"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Create</p>
+                <h2>Add category</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowCategoryForm(false)}>
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
-          </form>
-        </section>
+
+            <form className="question-form" onSubmit={handleCategorySubmit}>
+              <label>
+                Category name
+                <input
+                  value={categoryDraft.name}
+                  onChange={(event) => setCategoryDraft({ name: event.target.value })}
+                  placeholder="VD: Frontend, Backend, System Design..."
+                />
+              </label>
+
+              <div className="form-actions">
+                <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(false)}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit">
+                  Save category
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
       )}
 
       {showQuestionForm && (
-        <section className="editor-panel" aria-label="Create question">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">{editingQuestionId ? "Edit" : "Create"}</p>
-              <h2>{editingQuestionId ? "Edit question and answer" : "Add question and answer"}</h2>
-            </div>
-            <button className="icon-button" type="button" onClick={closeQuestionForm}>
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
-
-          <form className="question-form" onSubmit={handleQuestionSubmit}>
-            <label>
-              Category
-              <select
-                value={questionDraft.categoryId}
-                onChange={(event) =>
-                  setQuestionDraft({ ...questionDraft, categoryId: event.target.value })
-                }
-              >
-                <option value="">Select category</option>
-                {categories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Question
-              <textarea
-                value={questionDraft.question}
-                onChange={(event) =>
-                  setQuestionDraft({ ...questionDraft, question: event.target.value })
-                }
-                rows={4}
-                placeholder="Nhap cau hoi can on tap"
-              />
-            </label>
-
-            <label>
-              Answer
-              <textarea
-                value={questionDraft.answer}
-                onChange={(event) =>
-                  setQuestionDraft({ ...questionDraft, answer: event.target.value })
-                }
-                rows={8}
-                placeholder="Nhap cau tra loi, y chinh, vi du, trade-off..."
-              />
-            </label>
-
-            <div className="form-actions">
-              <button className="secondary-button" type="button" onClick={closeQuestionForm}>
-                Cancel
-              </button>
-              <button className="primary-button" type="submit">
-                {editingQuestionId ? "Update question" : "Save question"}
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeQuestionForm}>
+          <section
+            className="modal-panel"
+            aria-label={editingQuestionId ? "Edit question" : "Create question"}
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">{editingQuestionId ? "Edit" : "Create"}</p>
+                <h2>{editingQuestionId ? "Edit question and answer" : "Add question and answer"}</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={closeQuestionForm}>
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
-          </form>
-        </section>
+
+            <form className="question-form" onSubmit={handleQuestionSubmit}>
+              <label>
+                Category
+                <select
+                  value={questionDraft.categoryId}
+                  onChange={(event) =>
+                    setQuestionDraft({ ...questionDraft, categoryId: event.target.value })
+                  }
+                >
+                  <option value="">Select category</option>
+                  {categories.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Question
+                <textarea
+                  value={questionDraft.question}
+                  onChange={(event) =>
+                    setQuestionDraft({ ...questionDraft, question: event.target.value })
+                  }
+                  rows={4}
+                  placeholder="Nhap cau hoi can on tap"
+                />
+              </label>
+
+              <label>
+                Answer
+                <textarea
+                  value={questionDraft.answer}
+                  onChange={(event) =>
+                    setQuestionDraft({ ...questionDraft, answer: event.target.value })
+                  }
+                  rows={8}
+                  placeholder="Nhap cau tra loi, y chinh, vi du, trade-off..."
+                />
+              </label>
+
+              <div className="form-actions">
+                <button className="secondary-button" type="button" onClick={closeQuestionForm}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit">
+                  {editingQuestionId ? "Update question" : "Save question"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
       )}
 
       <section className="category-strip" aria-label="Categories">
