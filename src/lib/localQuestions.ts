@@ -1,20 +1,20 @@
-import { seedQuestions } from "../data/seedQuestions";
 import type { InterviewQuestion, QuestionDraft } from "../types";
 
 const STORAGE_KEY = "interview-handbook.local-questions";
+const LEGACY_SEED_PREFIX = "seed-";
 
 export function loadLocalQuestions() {
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
   if (!raw) {
-    return seedQuestions;
+    return [];
   }
 
   try {
     const parsed = JSON.parse(raw) as InterviewQuestion[];
-    return [...parsed, ...seedQuestions.filter((seed) => !parsed.some((item) => item.id === seed.id))];
+    return parsed.filter((item) => !item.id.startsWith(LEGACY_SEED_PREFIX));
   } catch {
-    return seedQuestions;
+    return [];
   }
 }
 
@@ -24,7 +24,7 @@ export function saveLocalQuestion(draft: QuestionDraft) {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
   };
-  const current = loadLocalQuestions().filter((item) => !item.id.startsWith("seed-"));
+  const current = loadLocalQuestions();
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify([question, ...current]));
   return question;
 }

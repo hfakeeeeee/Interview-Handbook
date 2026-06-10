@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  BookOpenCheck,
-  ChevronDown,
-  ChevronUp,
+  BookOpen,
+  CheckCircle2,
   Database,
+  FileQuestion,
   Filter,
-  Github,
-  Layers3,
   Plus,
   Search,
   Star,
+  X,
 } from "lucide-react";
 import { isFirebaseConfigured } from "./lib/firebaseConfig";
 import {
@@ -26,8 +25,8 @@ const emptyDraft: QuestionDraft = {
   title: "",
   question: "",
   answer: "",
-  category: "Frontend",
-  role: "React Developer",
+  category: "",
+  role: "",
   level: "Junior",
   tags: [],
   source: "",
@@ -73,14 +72,14 @@ export default function App() {
 
     void import("./lib/firebase").then(({ subscribeToQuestions }) => {
       unsubscribe = subscribeToQuestions(
-      (items) => {
-        setQuestions(items.length ? items : loadLocalQuestions());
-        setStatus("Firestore connected");
-      },
-      (error) => {
-        setStatus(error.message);
-        setQuestions(loadLocalQuestions());
-      },
+        (items) => {
+          setQuestions(items);
+          setStatus("Firestore connected");
+        },
+        (error) => {
+          setStatus(error.message);
+          setQuestions(loadLocalQuestions());
+        },
       );
     });
 
@@ -133,8 +132,8 @@ export default function App() {
       title: draft.title.trim(),
       question: draft.question.trim(),
       answer: draft.answer.trim(),
-      category: draft.category.trim(),
-      role: draft.role.trim(),
+      category: draft.category.trim() || "General",
+      role: draft.role.trim() || "General",
       source: draft.source?.trim(),
     };
 
@@ -171,55 +170,66 @@ export default function App() {
     });
   }
 
+  function resetFilters() {
+    setSearch("");
+    setCategory("All");
+    setRole("All");
+    setLevel("All");
+  }
+
+  const hasFilters = Boolean(search) || category !== "All" || role !== "All" || level !== "All";
+
   return (
     <main className="app-shell">
-      <section className="topbar" aria-label="Interview handbook toolbar">
-        <div>
-          <p className="eyebrow">Interview Handbook</p>
-          <h1>Question bank for focused interview prep</h1>
+      <header className="app-header">
+        <div className="brand-block">
+          <div className="brand-mark" aria-hidden="true">
+            <BookOpen size={22} />
+          </div>
+          <div>
+            <p className="eyebrow">Interview Handbook</p>
+            <h1>Practice questions, organized.</h1>
+          </div>
         </div>
 
-        <div className="topbar-actions">
+        <div className="header-actions">
           <span className={isFirebaseConfigured ? "status online" : "status"}>
             <Database size={16} aria-hidden="true" />
             {status}
           </span>
-          <a
-            className="icon-link"
-            href="https://github.com/"
-            title="Open GitHub"
-            aria-label="Open GitHub"
-          >
-            <Github size={20} aria-hidden="true" />
-          </a>
+          <button className="primary-button" type="button" onClick={() => setShowForm(true)}>
+            <Plus size={18} aria-hidden="true" />
+            New question
+          </button>
+        </div>
+      </header>
+
+      <section className="summary-grid" aria-label="Question summary">
+        <div className="summary-item">
+          <span>{questions.length}</span>
+          <p>Total questions</p>
+        </div>
+        <div className="summary-item">
+          <span>{filteredQuestions.length}</span>
+          <p>Current view</p>
+        </div>
+        <div className="summary-item">
+          <span>{favoriteQuestions}</span>
+          <p>Favorites</p>
         </div>
       </section>
 
-      <section className="workspace">
-        <aside className="sidebar" aria-label="Filters">
-          <div className="visual-panel" aria-hidden="true">
-            <div className="visual-panel__label">
-              <BookOpenCheck size={22} />
-              Prep board
-            </div>
-          </div>
+      <section className="toolbar" aria-label="Search and filters">
+        <div className="search-box">
+          <Search size={18} aria-hidden="true" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search title, question, answer, tag..."
+          />
+        </div>
 
-          <div className="metric-grid">
-            <div className="metric">
-              <span>{questions.length}</span>
-              <p>Total</p>
-            </div>
-            <div className="metric">
-              <span>{favoriteQuestions}</span>
-              <p>Saved</p>
-            </div>
-          </div>
-
-          <div className="filter-title">
-            <Filter size={18} aria-hidden="true" />
-            Filters
-          </div>
-
+        <div className="filter-grid">
           <label>
             Category
             <select value={category} onChange={(event) => setCategory(event.target.value)}>
@@ -252,162 +262,187 @@ export default function App() {
               ))}
             </select>
           </label>
-        </aside>
+        </div>
 
-        <section className="question-column" aria-label="Questions">
-          <div className="search-row">
-            <div className="search-box">
-              <Search size={18} aria-hidden="true" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search question, answer, tag..."
-              />
+        {hasFilters && (
+          <button className="icon-button" type="button" onClick={resetFilters} title="Clear filters">
+            <X size={18} aria-hidden="true" />
+          </button>
+        )}
+      </section>
+
+      {showForm && (
+        <section className="editor-panel" aria-label="Create question">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Create</p>
+              <h2>Add interview question</h2>
             </div>
-
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => setShowForm((value) => !value)}
-            >
-              <Plus size={18} aria-hidden="true" />
-              Add question
+            <button className="icon-button" type="button" onClick={() => setShowForm(false)}>
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
 
-          {showForm && (
-            <form className="question-form" onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <label>
-                  Title
-                  <input
-                    value={draft.title}
-                    onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                    placeholder="React rendering flow"
-                  />
-                </label>
-                <label>
-                  Category
-                  <input
-                    value={draft.category}
-                    onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                    placeholder="Frontend"
-                  />
-                </label>
-                <label>
-                  Role
-                  <input
-                    value={draft.role}
-                    onChange={(event) => setDraft({ ...draft, role: event.target.value })}
-                    placeholder="React Developer"
-                  />
-                </label>
-                <label>
-                  Level
-                  <select
-                    value={draft.level}
-                    onChange={(event) =>
-                      setDraft({ ...draft, level: event.target.value as QuestionLevel })
-                    }
-                  >
-                    {levels.map((item) => (
-                      <option key={item}>{item}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
+          <form className="question-form" onSubmit={handleSubmit}>
+            <div className="form-grid">
               <label>
-                Question
-                <textarea
-                  value={draft.question}
-                  onChange={(event) => setDraft({ ...draft, question: event.target.value })}
-                  rows={3}
-                  placeholder="What would you ask?"
+                Title
+                <input
+                  value={draft.title}
+                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+                  placeholder="VD: React rendering flow"
                 />
               </label>
-
               <label>
-                Answer
-                <textarea
-                  value={draft.answer}
-                  onChange={(event) => setDraft({ ...draft, answer: event.target.value })}
-                  rows={5}
-                  placeholder="Expected answer, signals, trade-offs..."
-                />
-              </label>
-
-              <div className="form-grid">
-                <label>
-                  Tags
-                  <input
-                    value={tagInput}
-                    onChange={(event) => setTagInput(event.target.value)}
-                    placeholder="react, state, hooks"
-                  />
-                </label>
-                <label>
-                  Source
-                  <input
-                    value={draft.source}
-                    onChange={(event) => setDraft({ ...draft, source: event.target.value })}
-                    placeholder="Internal notes"
-                  />
-                </label>
-              </div>
-
-              <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={() => setShowForm(false)}>
-                  Cancel
-                </button>
-                <button className="primary-button" type="submit">
-                  Save
-                </button>
-              </div>
-            </form>
-          )}
-
-          <div className="results-meta">
-            <Layers3 size={18} aria-hidden="true" />
-            {filteredQuestions.length} matches
-          </div>
-
-          <div className="question-list">
-            {filteredQuestions.map((item) => {
-              const isSelected = selectedQuestion?.id === item.id;
-              const isFavorite = favorites.has(item.id);
-
-              return (
-                <article
-                  className={isSelected ? "question-card selected" : "question-card"}
-                  key={item.id}
+                Level
+                <select
+                  value={draft.level}
+                  onChange={(event) =>
+                    setDraft({ ...draft, level: event.target.value as QuestionLevel })
+                  }
                 >
-                  <button
-                    className="question-card__main"
-                    type="button"
-                    onClick={() => setSelectedId(item.id)}
-                  >
-                    <span className="pill">{item.level}</span>
-                    <h2>{item.title}</h2>
-                    <p>{item.question}</p>
-                    <span className="meta-line">
-                      {item.category} / {item.role}
-                    </span>
-                  </button>
+                  {levels.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Category
+                <input
+                  value={draft.category}
+                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                  placeholder="Frontend"
+                />
+              </label>
+              <label>
+                Role
+                <input
+                  value={draft.role}
+                  onChange={(event) => setDraft({ ...draft, role: event.target.value })}
+                  placeholder="React Developer"
+                />
+              </label>
+            </div>
 
-                  <button
-                    className={isFavorite ? "star-button active" : "star-button"}
-                    type="button"
-                    onClick={() => toggleFavorite(item.id)}
-                    title={isFavorite ? "Remove favorite" : "Add favorite"}
-                    aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
-                  >
-                    <Star size={18} fill={isFavorite ? "currentColor" : "none"} />
-                  </button>
-                </article>
-              );
-            })}
+            <label>
+              Question
+              <textarea
+                value={draft.question}
+                onChange={(event) => setDraft({ ...draft, question: event.target.value })}
+                rows={3}
+                placeholder="Nhap cau hoi can on tap"
+              />
+            </label>
+
+            <label>
+              Answer
+              <textarea
+                value={draft.answer}
+                onChange={(event) => setDraft({ ...draft, answer: event.target.value })}
+                rows={6}
+                placeholder="Ghi dap an mong doi, y chinh, trade-off..."
+              />
+            </label>
+
+            <div className="form-grid">
+              <label>
+                Tags
+                <input
+                  value={tagInput}
+                  onChange={(event) => setTagInput(event.target.value)}
+                  placeholder="react, state, hooks"
+                />
+              </label>
+              <label>
+                Source
+                <input
+                  value={draft.source}
+                  onChange={(event) => setDraft({ ...draft, source: event.target.value })}
+                  placeholder="Optional"
+                />
+              </label>
+            </div>
+
+            <div className="form-actions">
+              <button className="secondary-button" type="button" onClick={() => setShowForm(false)}>
+                Cancel
+              </button>
+              <button className="primary-button" type="submit">
+                Save question
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="practice-layout">
+        <section className="question-list-panel" aria-label="Questions">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Library</p>
+              <h2>Questions</h2>
+            </div>
+            <span className="match-count">
+              <Filter size={16} aria-hidden="true" />
+              {filteredQuestions.length}
+            </span>
           </div>
+
+          {filteredQuestions.length ? (
+            <div className="question-list">
+              {filteredQuestions.map((item) => {
+                const isSelected = selectedQuestion?.id === item.id;
+                const isFavorite = favorites.has(item.id);
+
+                return (
+                  <article
+                    className={isSelected ? "question-card selected" : "question-card"}
+                    key={item.id}
+                  >
+                    <button
+                      className="question-card__main"
+                      type="button"
+                      onClick={() => setSelectedId(item.id)}
+                    >
+                      <span className="card-kicker">
+                        {item.category} / {item.level}
+                      </span>
+                      <h3>{item.title}</h3>
+                      <p>{item.question}</p>
+                      <span className="meta-line">{item.role}</span>
+                    </button>
+
+                    <button
+                      className={isFavorite ? "star-button active" : "star-button"}
+                      type="button"
+                      onClick={() => toggleFavorite(item.id)}
+                      title={isFavorite ? "Remove favorite" : "Add favorite"}
+                      aria-label={isFavorite ? "Remove favorite" : "Add favorite"}
+                    >
+                      <Star size={18} fill={isFavorite ? "currentColor" : "none"} />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <FileQuestion size={34} aria-hidden="true" />
+              <h3>{questions.length ? "No questions match your filters" : "No questions yet"}</h3>
+              <p>
+                {questions.length
+                  ? "Try clearing filters or search with another keyword."
+                  : "Add your first interview question to start building the handbook."}
+              </p>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={questions.length ? resetFilters : () => setShowForm(true)}
+              >
+                {questions.length ? "Clear filters" : "New question"}
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="answer-panel" aria-label="Selected answer">
@@ -415,11 +450,11 @@ export default function App() {
             <>
               <div className="answer-panel__header">
                 <div>
-                  <p className="eyebrow">{selectedQuestion.category}</p>
+                  <p className="eyebrow">{selectedQuestion.role}</p>
                   <h2>{selectedQuestion.title}</h2>
                 </div>
                 <button
-                  className="star-button panel-star"
+                  className={favorites.has(selectedQuestion.id) ? "star-button active" : "star-button"}
                   type="button"
                   onClick={() => toggleFavorite(selectedQuestion.id)}
                   title="Toggle favorite"
@@ -432,9 +467,15 @@ export default function App() {
                 </button>
               </div>
 
+              <div className="answer-meta">
+                <span>{selectedQuestion.category}</span>
+                <span>{selectedQuestion.level}</span>
+                <span>{selectedQuestion.source || "Manual"}</span>
+              </div>
+
               <div className="answer-block">
                 <div className="block-heading">
-                  <ChevronDown size={18} aria-hidden="true" />
+                  <FileQuestion size={18} aria-hidden="true" />
                   Question
                 </div>
                 <p>{selectedQuestion.question}</p>
@@ -442,35 +483,26 @@ export default function App() {
 
               <div className="answer-block answer">
                 <div className="block-heading">
-                  <ChevronUp size={18} aria-hidden="true" />
+                  <CheckCircle2 size={18} aria-hidden="true" />
                   Expected answer
                 </div>
                 <p>{selectedQuestion.answer}</p>
               </div>
 
-              <div className="tag-row">
-                {selectedQuestion.tags.map((tag) => (
-                  <span key={tag}>{tag}</span>
-                ))}
-              </div>
-
-              <dl className="detail-list">
-                <div>
-                  <dt>Role</dt>
-                  <dd>{selectedQuestion.role}</dd>
+              {selectedQuestion.tags.length > 0 && (
+                <div className="tag-row">
+                  {selectedQuestion.tags.map((tag) => (
+                    <span key={tag}>{tag}</span>
+                  ))}
                 </div>
-                <div>
-                  <dt>Level</dt>
-                  <dd>{selectedQuestion.level}</dd>
-                </div>
-                <div>
-                  <dt>Source</dt>
-                  <dd>{selectedQuestion.source || "Manual"}</dd>
-                </div>
-              </dl>
+              )}
             </>
           ) : (
-            <div className="empty-state">No question matched.</div>
+            <div className="empty-state">
+              <FileQuestion size={34} aria-hidden="true" />
+              <h3>Select a question</h3>
+              <p>Your answer notes will appear here.</p>
+            </div>
           )}
         </section>
       </section>
