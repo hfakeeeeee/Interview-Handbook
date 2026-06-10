@@ -308,6 +308,12 @@ textarea:focus,
   color: #b45309;
 }
 
+.danger-button:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .section-heading {
   justify-content: space-between;
   gap: 12px;
@@ -401,13 +407,13 @@ textarea:focus,
 .category-chip {
   display: inline-flex;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
   max-width: 260px;
   min-height: 40px;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 0 10px;
+  padding: 0 6px 0 10px;
   background: #ffffff;
   color: #334155;
   text-align: left;
@@ -422,6 +428,19 @@ textarea:focus,
 
 .category-chip:hover {
   transform: translateY(-1px);
+}
+
+.category-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 38px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: inherit;
 }
 
 .category-chip span {
@@ -439,6 +458,28 @@ textarea:focus,
   color: #475569;
   font-size: 0.78rem;
   text-align: center;
+}
+
+.chip-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+}
+
+.chip-action:hover {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.danger-chip-action:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .match-count {

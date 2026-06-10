@@ -2,6 +2,7 @@ import { initializeApp, type FirebaseApp } from "firebase/app";
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getFirestore,
   onSnapshot,
@@ -122,6 +123,14 @@ export async function updateQuestion(questionId: string, draft: QuestionDraft) {
   });
 }
 
+export async function deleteQuestion(questionId: string) {
+  if (!isFirebaseConfigured) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  await deleteDoc(doc(questionsCollection(), questionId));
+}
+
 export async function createCategory(draft: CategoryDraft) {
   if (!isFirebaseConfigured) {
     throw new Error("Firebase is not configured.");
@@ -132,4 +141,23 @@ export async function createCategory(draft: CategoryDraft) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function updateCategory(categoryId: string, draft: CategoryDraft) {
+  if (!isFirebaseConfigured) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  await updateDoc(doc(categoriesCollection(), categoryId), {
+    ...draft,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteCategory(categoryId: string) {
+  if (!isFirebaseConfigured) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  await deleteDoc(doc(categoriesCollection(), categoryId));
 }

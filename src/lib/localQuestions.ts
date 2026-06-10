@@ -38,6 +38,25 @@ export function saveLocalCategory(draft: CategoryDraft) {
   return category;
 }
 
+export function updateLocalCategory(categoryId: string, draft: CategoryDraft) {
+  const updated = loadLocalCategories().map((item) =>
+    item.id === categoryId
+      ? {
+          ...item,
+          name: draft.name.trim(),
+        }
+      : item,
+  );
+
+  window.localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(updated));
+  return updated.find((item) => item.id === categoryId) ?? null;
+}
+
+export function deleteLocalCategory(categoryId: string) {
+  const updated = loadLocalCategories().filter((item) => item.id !== categoryId);
+  window.localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(updated));
+}
+
 export function loadLocalQuestions() {
   const raw = window.localStorage.getItem(STORAGE_KEY);
 
@@ -86,6 +105,11 @@ export function updateLocalQuestion(questionId: string, draft: QuestionDraft) {
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   return updated.find((item) => item.id === questionId) ?? null;
+}
+
+export function deleteLocalQuestion(questionId: string) {
+  const updated = loadLocalQuestions().filter((item) => item.id !== questionId);
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }
 
 const FAVORITES_KEY = "interview-handbook.favorite-ids";

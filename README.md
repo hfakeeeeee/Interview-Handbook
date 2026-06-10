@@ -6,6 +6,7 @@ Firebase Firestore o free tier.
 ## Tinh nang
 
 - Tao category rieng, sau do them question/answer vao category do.
+- Chinh sua va xoa category rong.
 - Chon category de load va tim kiem cac cau hoi thuoc category.
 - Tim kiem full text theo question va answer.
 - Xem cau hoi va cau tra loi trong panel rieng de on tap nhanh.

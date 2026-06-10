@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import { isFirebaseConfigured } from "./lib/firebaseConfig";
@@ -19,9 +20,12 @@ import {
   loadFavoriteIds,
   loadLocalCategories,
   loadLocalQuestions,
+  deleteLocalCategory,
+  deleteLocalQuestion,
   saveFavoriteIds,
   saveLocalCategory,
   saveLocalQuestion,
+  updateLocalCategory,
   updateLocalQuestion,
 } from "./lib/localQuestions";
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "./types";
@@ -51,6 +55,7 @@ export default function App() {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
@@ -168,17 +173,28 @@ export default function App() {
     }
 
     if (isFirebaseConfigured) {
-      const { createCategory } = await import("./lib/firebase");
-      await createCategory(nextDraft);
-      setStatus("Saved category to Firestore");
+      const { createCategory, updateCategory } = await import("./lib/firebase");
+
+      if (editingCategoryId) {
+        await updateCategory(editingCategoryId, nextDraft);
+        setStatus("Updated category in Firestore");
+      } else {
+        await createCategory(nextDraft);
+        setStatus("Saved category to Firestore");
+      }
     } else {
-      const created = saveLocalCategory(nextDraft);
+      const created = editingCategoryId
+        ? updateLocalCategory(editingCategoryId, nextDraft)
+        : saveLocalCategory(nextDraft);
       setCategories(loadLocalCategories());
-      setSelectedCategoryId(created.id);
-      setStatus("Saved category locally");
+      if (created) {
+        setSelectedCategoryId(created.id);
+      }
+      setStatus(editingCategoryId ? "Updated category locally" : "Saved category locally");
     }
 
     setCategoryDraft(emptyCategoryDraft);
+    setEditingCategoryId(null);
     setShowCategoryForm(false);
   }
 
@@ -237,6 +253,79 @@ export default function App() {
       }
       return next;
     });
+  }
+
+  async function handleDeleteQuestion(question: InterviewQuestion) {
+    const confirmed = window.confirm("Delete this question? This action cannot be undone.");
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (isFirebaseConfigured) {
+      const { deleteQuestion } = await import("./lib/firebase");
+      await deleteQuestion(question.id);
+      setStatus("Deleted question from Firestore");
+    } else {
+      deleteLocalQuestion(question.id);
+      setQuestions(loadLocalQuestions());
+      setStatus("Deleted question locally");
+    }
+
+    setFavorites((current) => {
+      const next = new Set(current);
+      next.delete(question.id);
+      return next;
+    });
+
+    setSelectedId(null);
+  }
+
+  function openCategoryForm() {
+    setEditingCategoryId(null);
+    setCategoryDraft(emptyCategoryDraft);
+    setShowCategoryForm(true);
+  }
+
+  function openEditCategoryForm(category: Category) {
+    setEditingCategoryId(category.id);
+    setCategoryDraft({ name: category.name });
+    setShowCategoryForm(true);
+  }
+
+  function closeCategoryForm() {
+    setEditingCategoryId(null);
+    setCategoryDraft(emptyCategoryDraft);
+    setShowCategoryForm(false);
+  }
+
+  async function handleDeleteCategory(category: Category) {
+    const questionCount = questionsByCategory[category.id] ?? 0;
+
+    if (questionCount > 0) {
+      setStatus("Cannot delete category that still has questions");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete category "${category.name}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (isFirebaseConfigured) {
+      const { deleteCategory } = await import("./lib/firebase");
+      await deleteCategory(category.id);
+      setStatus("Deleted category from Firestore");
+    } else {
+      deleteLocalCategory(category.id);
+      setCategories(loadLocalCategories());
+      setStatus("Deleted category locally");
+    }
+
+    if (selectedCategoryId === category.id) {
+      setSelectedCategoryId(ALL_CATEGORIES_ID);
+    }
   }
 
   function openQuestionForm() {
@@ -322,7 +411,7 @@ export default function App() {
       </section>
 
       {showCategoryForm && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowCategoryForm(false)}>
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeCategoryForm}>
           <section
             className="modal-panel compact-modal"
             aria-label="Create category"
@@ -332,10 +421,10 @@ export default function App() {
           >
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Create</p>
-                <h2>Add category</h2>
+                <p className="eyebrow">{editingCategoryId ? "Edit" : "Create"}</p>
+                <h2>{editingCategoryId ? "Edit category" : "Add category"}</h2>
               </div>
-              <button className="icon-button" type="button" onClick={() => setShowCategoryForm(false)}>
+              <button className="icon-button" type="button" onClick={closeCategoryForm}>
                 <X size={18} aria-hidden="true" />
               </button>
             </div>
@@ -351,11 +440,11 @@ export default function App() {
               </label>
 
               <div className="form-actions">
-                <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(false)}>
+                <button className="secondary-button" type="button" onClick={closeCategoryForm}>
                   Cancel
                 </button>
                 <button className="primary-button" type="submit">
-                  Save category
+                  {editingCategoryId ? "Update category" : "Save category"}
                 </button>
               </div>
             </form>
@@ -450,20 +539,35 @@ export default function App() {
           </button>
 
           {categories.map((item) => (
-            <button
-              className={selectedCategoryId === item.id ? "category-chip active" : "category-chip"}
-              key={item.id}
-              type="button"
-              onClick={() => setSelectedCategoryId(item.id)}
-            >
-              <Folder size={17} aria-hidden="true" />
-              <span>{item.name}</span>
-              <strong>{questionsByCategory[item.id] ?? 0}</strong>
-            </button>
+            <div className={selectedCategoryId === item.id ? "category-chip active" : "category-chip"} key={item.id}>
+              <button className="category-select" type="button" onClick={() => setSelectedCategoryId(item.id)}>
+                <Folder size={17} aria-hidden="true" />
+                <span>{item.name}</span>
+                <strong>{questionsByCategory[item.id] ?? 0}</strong>
+              </button>
+              <button
+                className="chip-action"
+                type="button"
+                onClick={() => openEditCategoryForm(item)}
+                title="Edit category"
+                aria-label="Edit category"
+              >
+                <Pencil size={14} aria-hidden="true" />
+              </button>
+              <button
+                className="chip-action danger-chip-action"
+                type="button"
+                onClick={() => handleDeleteCategory(item)}
+                title="Delete empty category"
+                aria-label="Delete category"
+              >
+                <Trash2 size={14} aria-hidden="true" />
+              </button>
+            </div>
           ))}
         </div>
 
-        <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(true)}>
+        <button className="secondary-button" type="button" onClick={openCategoryForm}>
           <FolderPlus size={18} aria-hidden="true" />
           New category
         </button>
@@ -560,7 +664,7 @@ export default function App() {
               <button
                 className="primary-button"
                 type="button"
-                onClick={categories.length ? openQuestionForm : () => setShowCategoryForm(true)}
+                onClick={categories.length ? openQuestionForm : openCategoryForm}
               >
                 {categories.length ? "New question" : "New category"}
               </button>
@@ -587,6 +691,15 @@ export default function App() {
                     aria-label="Edit question"
                   >
                     <Pencil size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="icon-button danger-button"
+                    type="button"
+                    onClick={() => handleDeleteQuestion(selectedQuestion)}
+                    title="Delete question"
+                    aria-label="Delete question"
+                  >
+                    <Trash2 size={18} aria-hidden="true" />
                   </button>
                   <button
                     className={favorites.has(selectedQuestion.id) ? "star-button active" : "star-button"}
