@@ -5,9 +5,10 @@ Firebase Firestore o free tier.
 
 ## Tinh nang
 
-- Tim kiem full text theo title, question, answer, tag, role va category.
-- Loc cau hoi theo category, role va level.
-- Xem dap an ky vong trong panel rieng de on tap nhanh.
+- Tao category rieng, sau do them question/answer vao category do.
+- Chon category de load va tim kiem cac cau hoi thuoc category.
+- Tim kiem full text theo question va answer.
+- Xem cau hoi va cau tra loi trong panel rieng de on tap nhanh.
 - Danh dau favorite bang localStorage.
 - Them cau hoi moi. Khi chua cau hinh Firebase, du lieu se luu local trong trinh duyet.
 - Khi da cau hinh Firebase, app doc/ghi collection `questions` tren Firestore.
@@ -45,24 +46,30 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=...
 VITE_FIREBASE_APP_ID=...
 ```
 
-App se doc collection:
+App se doc 2 collection:
 
 ```text
+categories
 questions
 ```
 
-Moi document co dang:
+Document trong `categories`:
 
 ```json
 {
-  "title": "Event loop trong Node.js",
+  "name": "Frontend",
+  "createdAt": "server timestamp",
+  "updatedAt": "server timestamp"
+}
+```
+
+Document trong `questions`:
+
+```json
+{
+  "categoryId": "<category document id>",
   "question": "Hay giai thich event loop...",
   "answer": "Node.js chay JavaScript tren main thread...",
-  "category": "Backend",
-  "role": "Node.js Developer",
-  "level": "Middle",
-  "tags": ["nodejs", "event-loop"],
-  "source": "Internal notes",
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }

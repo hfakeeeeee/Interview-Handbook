@@ -47,6 +47,7 @@ p {
 .app-header,
 .toolbar,
 .editor-panel,
+.category-panel,
 .question-list-panel,
 .answer-panel,
 .summary-item {
@@ -168,6 +169,11 @@ h1 {
   align-items: end;
 }
 
+.simple-toolbar {
+  grid-template-columns: minmax(260px, 1fr) auto;
+  align-items: center;
+}
+
 .search-box {
   gap: 10px;
   min-height: 44px;
@@ -184,17 +190,6 @@ h1 {
   padding: 0;
   background: transparent;
   box-shadow: none;
-}
-
-.filter-grid,
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.form-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 label {
@@ -318,15 +313,73 @@ textarea:focus,
   align-items: start;
 }
 
+.practice-layout.with-categories {
+  grid-template-columns: minmax(220px, 280px) minmax(340px, 0.95fr) minmax(420px, 1.35fr);
+}
+
+.category-panel,
 .question-list-panel,
 .answer-panel {
   min-width: 0;
   padding: 18px;
 }
 
+.category-panel {
+  position: sticky;
+  top: 18px;
+}
+
 .answer-panel {
   position: sticky;
   top: 18px;
+}
+
+.compact-form {
+  max-width: 560px;
+}
+
+.category-list {
+  display: grid;
+  gap: 8px;
+}
+
+.category-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0 11px;
+  background: #ffffff;
+  color: #334155;
+  text-align: left;
+}
+
+.category-item:hover,
+.category-item.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.category-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.category-item strong {
+  min-width: 28px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.78rem;
+  text-align: center;
 }
 
 .match-count {
@@ -389,10 +442,14 @@ textarea:focus,
 }
 
 .question-card h3 {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
   color: #111827;
   font-size: 1.02rem;
   line-height: 1.28;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .question-card p {
@@ -501,10 +558,12 @@ textarea:focus,
     grid-template-columns: 1fr;
   }
 
-  .practice-layout {
+  .practice-layout,
+  .practice-layout.with-categories {
     grid-template-columns: 1fr;
   }
 
+  .category-panel,
   .answer-panel {
     position: static;
   }
@@ -528,9 +587,7 @@ textarea:focus,
     width: 100%;
   }
 
-  .summary-grid,
-  .filter-grid,
-  .form-grid {
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 }

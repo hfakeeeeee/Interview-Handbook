@@ -1,15 +1,16 @@
-export type QuestionLevel = "Intern" | "Junior" | "Middle" | "Senior";
+export type Category = {
+  id: string;
+  name: string;
+  createdAt?: string;
+};
+
+export type CategoryDraft = Omit<Category, "id" | "createdAt">;
 
 export type InterviewQuestion = {
   id: string;
-  title: string;
+  categoryId: string;
   question: string;
   answer: string;
-  category: string;
-  role: string;
-  level: QuestionLevel;
-  tags: string[];
-  source?: string;
   createdAt?: string;
 };
 

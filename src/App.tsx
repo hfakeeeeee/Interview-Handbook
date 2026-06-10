@@ -4,7 +4,8 @@ import {
   CheckCircle2,
   Database,
   FileQuestion,
-  Filter,
+  Folder,
+  FolderPlus,
   Plus,
   Search,
   Star,
@@ -13,52 +14,37 @@ import {
 import { isFirebaseConfigured } from "./lib/firebaseConfig";
 import {
   loadFavoriteIds,
+  loadLocalCategories,
   loadLocalQuestions,
   saveFavoriteIds,
+  saveLocalCategory,
   saveLocalQuestion,
 } from "./lib/localQuestions";
-import type { InterviewQuestion, QuestionDraft, QuestionLevel } from "./types";
+import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "./types";
 
-const levels: QuestionLevel[] = ["Intern", "Junior", "Middle", "Senior"];
+const ALL_CATEGORIES_ID = "all";
 
-const emptyDraft: QuestionDraft = {
-  title: "",
+const emptyQuestionDraft: QuestionDraft = {
+  categoryId: "",
   question: "",
   answer: "",
-  category: "",
-  role: "",
-  level: "Junior",
-  tags: [],
-  source: "",
 };
 
-function unique(values: string[]) {
-  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
-}
-
-function matches(value: string, selected: string) {
-  return selected === "All" || value === selected;
-}
-
-function normaliseTags(input: string) {
-  return input
-    .split(",")
-    .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean)
-    .slice(0, 8);
-}
+const emptyCategoryDraft: CategoryDraft = {
+  name: "",
+};
 
 export default function App() {
+  const [categories, setCategories] = useState<Category[]>(() => loadLocalCategories());
   const [questions, setQuestions] = useState<InterviewQuestion[]>(() => loadLocalQuestions());
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteIds());
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All");
-  const [role, setRole] = useState("All");
-  const [level, setLevel] = useState<QuestionLevel | "All">("All");
+  const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [draft, setDraft] = useState<QuestionDraft>(emptyDraft);
-  const [tagInput, setTagInput] = useState("");
+  const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
+  const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -68,10 +54,22 @@ export default function App() {
     }
 
     setStatus("Connecting Firestore");
-    let unsubscribe: () => void = () => undefined;
+    let unsubscribeQuestions: () => void = () => undefined;
+    let unsubscribeCategories: () => void = () => undefined;
 
-    void import("./lib/firebase").then(({ subscribeToQuestions }) => {
-      unsubscribe = subscribeToQuestions(
+    void import("./lib/firebase").then(({ subscribeToCategories, subscribeToQuestions }) => {
+      unsubscribeCategories = subscribeToCategories(
+        (items) => {
+          setCategories(items);
+          setStatus("Firestore connected");
+        },
+        (error) => {
+          setStatus(error.message);
+          setCategories(loadLocalCategories());
+        },
+      );
+
+      unsubscribeQuestions = subscribeToQuestions(
         (items) => {
           setQuestions(items);
           setStatus("Firestore connected");
@@ -83,79 +81,115 @@ export default function App() {
       );
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeQuestions();
+      unsubscribeCategories();
+    };
   }, []);
 
   useEffect(() => {
     saveFavoriteIds(favorites);
   }, [favorites]);
 
-  const categories = useMemo(() => unique(questions.map((item) => item.category)), [questions]);
-  const roles = useMemo(() => unique(questions.map((item) => item.role)), [questions]);
+  useEffect(() => {
+    if (selectedCategoryId !== ALL_CATEGORIES_ID && !categories.some((item) => item.id === selectedCategoryId)) {
+      setSelectedCategoryId(ALL_CATEGORIES_ID);
+    }
+  }, [categories, selectedCategoryId]);
+
+  const categoryById = useMemo(() => {
+    return new Map(categories.map((item) => [item.id, item.name]));
+  }, [categories]);
+
+  const questionsByCategory = useMemo(() => {
+    return questions.reduce<Record<string, number>>((accumulator, item) => {
+      accumulator[item.categoryId] = (accumulator[item.categoryId] ?? 0) + 1;
+      return accumulator;
+    }, {});
+  }, [questions]);
 
   const filteredQuestions = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
     return questions.filter((item) => {
-      const haystack = [
-        item.title,
-        item.question,
-        item.answer,
-        item.category,
-        item.role,
-        item.level,
-        item.tags.join(" "),
-      ]
-        .join(" ")
-        .toLowerCase();
+      const inSelectedCategory =
+        selectedCategoryId === ALL_CATEGORIES_ID || item.categoryId === selectedCategoryId;
+      const matchesSearch =
+        !keyword || [item.question, item.answer].join(" ").toLowerCase().includes(keyword);
 
-      return (
-        (!keyword || haystack.includes(keyword)) &&
-        matches(item.category, category) &&
-        matches(item.role, role) &&
-        matches(item.level, level)
-      );
+      return inSelectedCategory && matchesSearch;
     });
-  }, [category, level, questions, role, search]);
+  }, [questions, search, selectedCategoryId]);
 
   const selectedQuestion =
     filteredQuestions.find((item) => item.id === selectedId) ?? filteredQuestions[0] ?? null;
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
+  const hasSearch = search.trim().length > 0;
+  const activeCategoryName =
+    selectedCategoryId === ALL_CATEGORIES_ID
+      ? "All categories"
+      : categoryById.get(selectedCategoryId) ?? "Uncategorized";
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleCategorySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const nextDraft = {
-      ...draft,
-      tags: normaliseTags(tagInput),
-      title: draft.title.trim(),
-      question: draft.question.trim(),
-      answer: draft.answer.trim(),
-      category: draft.category.trim() || "General",
-      role: draft.role.trim() || "General",
-      source: draft.source?.trim(),
+      name: categoryDraft.name.trim(),
     };
 
-    if (!nextDraft.title || !nextDraft.question || !nextDraft.answer) {
-      setStatus("Title, question va answer la bat buoc");
+    if (!nextDraft.name) {
+      setStatus("Category name la bat buoc");
+      return;
+    }
+
+    if (isFirebaseConfigured) {
+      const { createCategory } = await import("./lib/firebase");
+      await createCategory(nextDraft);
+      setStatus("Saved category to Firestore");
+    } else {
+      const created = saveLocalCategory(nextDraft);
+      setCategories(loadLocalCategories());
+      setSelectedCategoryId(created.id);
+      setStatus("Saved category locally");
+    }
+
+    setCategoryDraft(emptyCategoryDraft);
+    setShowCategoryForm(false);
+  }
+
+  async function handleQuestionSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const categoryId =
+      questionDraft.categoryId ||
+      (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
+
+    const nextDraft = {
+      categoryId: categoryId ?? "",
+      question: questionDraft.question.trim(),
+      answer: questionDraft.answer.trim(),
+    };
+
+    if (!nextDraft.categoryId || !nextDraft.question || !nextDraft.answer) {
+      setStatus("Category, question va answer la bat buoc");
       return;
     }
 
     if (isFirebaseConfigured) {
       const { createQuestion } = await import("./lib/firebase");
       await createQuestion(nextDraft);
-      setStatus("Saved to Firestore");
+      setStatus("Saved question to Firestore");
     } else {
       const created = saveLocalQuestion(nextDraft);
       setQuestions(loadLocalQuestions());
+      setSelectedCategoryId(created.categoryId);
       setSelectedId(created.id);
-      setStatus("Saved locally");
+      setStatus("Saved question locally");
     }
 
-    setDraft(emptyDraft);
-    setTagInput("");
-    setShowForm(false);
+    setQuestionDraft(emptyQuestionDraft);
+    setShowQuestionForm(false);
   }
 
   function toggleFavorite(id: string) {
@@ -170,14 +204,13 @@ export default function App() {
     });
   }
 
-  function resetFilters() {
-    setSearch("");
-    setCategory("All");
-    setRole("All");
-    setLevel("All");
+  function openQuestionForm() {
+    setQuestionDraft({
+      ...emptyQuestionDraft,
+      categoryId: selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id ?? "" : selectedCategoryId,
+    });
+    setShowQuestionForm(true);
   }
-
-  const hasFilters = Boolean(search) || category !== "All" || role !== "All" || level !== "All";
 
   return (
     <main className="app-shell">
@@ -188,7 +221,7 @@ export default function App() {
           </div>
           <div>
             <p className="eyebrow">Interview Handbook</p>
-            <h1>Practice questions, organized.</h1>
+            <h1>Practice by category.</h1>
           </div>
         </div>
 
@@ -197,7 +230,11 @@ export default function App() {
             <Database size={16} aria-hidden="true" />
             {status}
           </span>
-          <button className="primary-button" type="button" onClick={() => setShowForm(true)}>
+          <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(true)}>
+            <FolderPlus size={18} aria-hidden="true" />
+            New category
+          </button>
+          <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
             New question
           </button>
@@ -206,12 +243,12 @@ export default function App() {
 
       <section className="summary-grid" aria-label="Question summary">
         <div className="summary-item">
-          <span>{questions.length}</span>
-          <p>Total questions</p>
+          <span>{categories.length}</span>
+          <p>Categories</p>
         </div>
         <div className="summary-item">
           <span>{filteredQuestions.length}</span>
-          <p>Current view</p>
+          <p>Visible questions</p>
         </div>
         <div className="summary-item">
           <span>{favoriteQuestions}</span>
@@ -219,117 +256,95 @@ export default function App() {
         </div>
       </section>
 
-      <section className="toolbar" aria-label="Search and filters">
+      <section className="toolbar simple-toolbar" aria-label="Search">
         <div className="search-box">
           <Search size={18} aria-hidden="true" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search title, question, answer, tag..."
+            placeholder={`Search in ${activeCategoryName}...`}
           />
         </div>
 
-        <div className="filter-grid">
-          <label>
-            Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              <option>All</option>
-              {categories.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Role
-            <select value={role} onChange={(event) => setRole(event.target.value)}>
-              <option>All</option>
-              {roles.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Level
-            <select
-              value={level}
-              onChange={(event) => setLevel(event.target.value as QuestionLevel | "All")}
-            >
-              <option>All</option>
-              {levels.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {hasFilters && (
-          <button className="icon-button" type="button" onClick={resetFilters} title="Clear filters">
+        {hasSearch && (
+          <button className="icon-button" type="button" onClick={() => setSearch("")} title="Clear search">
             <X size={18} aria-hidden="true" />
           </button>
         )}
       </section>
 
-      {showForm && (
-        <section className="editor-panel" aria-label="Create question">
+      {showCategoryForm && (
+        <section className="editor-panel" aria-label="Create category">
           <div className="section-heading">
             <div>
               <p className="eyebrow">Create</p>
-              <h2>Add interview question</h2>
+              <h2>Add category</h2>
             </div>
-            <button className="icon-button" type="button" onClick={() => setShowForm(false)}>
+            <button className="icon-button" type="button" onClick={() => setShowCategoryForm(false)}>
               <X size={18} aria-hidden="true" />
             </button>
           </div>
 
-          <form className="question-form" onSubmit={handleSubmit}>
-            <div className="form-grid">
-              <label>
-                Title
-                <input
-                  value={draft.title}
-                  onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                  placeholder="VD: React rendering flow"
-                />
-              </label>
-              <label>
-                Level
-                <select
-                  value={draft.level}
-                  onChange={(event) =>
-                    setDraft({ ...draft, level: event.target.value as QuestionLevel })
-                  }
-                >
-                  {levels.map((item) => (
-                    <option key={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Category
-                <input
-                  value={draft.category}
-                  onChange={(event) => setDraft({ ...draft, category: event.target.value })}
-                  placeholder="Frontend"
-                />
-              </label>
-              <label>
-                Role
-                <input
-                  value={draft.role}
-                  onChange={(event) => setDraft({ ...draft, role: event.target.value })}
-                  placeholder="React Developer"
-                />
-              </label>
+          <form className="question-form compact-form" onSubmit={handleCategorySubmit}>
+            <label>
+              Category name
+              <input
+                value={categoryDraft.name}
+                onChange={(event) => setCategoryDraft({ name: event.target.value })}
+                placeholder="VD: Frontend, Backend, System Design..."
+              />
+            </label>
+
+            <div className="form-actions">
+              <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(false)}>
+                Cancel
+              </button>
+              <button className="primary-button" type="submit">
+                Save category
+              </button>
             </div>
+          </form>
+        </section>
+      )}
+
+      {showQuestionForm && (
+        <section className="editor-panel" aria-label="Create question">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Create</p>
+              <h2>Add question and answer</h2>
+            </div>
+            <button className="icon-button" type="button" onClick={() => setShowQuestionForm(false)}>
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+
+          <form className="question-form" onSubmit={handleQuestionSubmit}>
+            <label>
+              Category
+              <select
+                value={questionDraft.categoryId}
+                onChange={(event) =>
+                  setQuestionDraft({ ...questionDraft, categoryId: event.target.value })
+                }
+              >
+                <option value="">Select category</option>
+                {categories.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label>
               Question
               <textarea
-                value={draft.question}
-                onChange={(event) => setDraft({ ...draft, question: event.target.value })}
-                rows={3}
+                value={questionDraft.question}
+                onChange={(event) =>
+                  setQuestionDraft({ ...questionDraft, question: event.target.value })
+                }
+                rows={4}
                 placeholder="Nhap cau hoi can on tap"
               />
             </label>
@@ -337,34 +352,17 @@ export default function App() {
             <label>
               Answer
               <textarea
-                value={draft.answer}
-                onChange={(event) => setDraft({ ...draft, answer: event.target.value })}
-                rows={6}
-                placeholder="Ghi dap an mong doi, y chinh, trade-off..."
+                value={questionDraft.answer}
+                onChange={(event) =>
+                  setQuestionDraft({ ...questionDraft, answer: event.target.value })
+                }
+                rows={8}
+                placeholder="Nhap cau tra loi, y chinh, vi du, trade-off..."
               />
             </label>
 
-            <div className="form-grid">
-              <label>
-                Tags
-                <input
-                  value={tagInput}
-                  onChange={(event) => setTagInput(event.target.value)}
-                  placeholder="react, state, hooks"
-                />
-              </label>
-              <label>
-                Source
-                <input
-                  value={draft.source}
-                  onChange={(event) => setDraft({ ...draft, source: event.target.value })}
-                  placeholder="Optional"
-                />
-              </label>
-            </div>
-
             <div className="form-actions">
-              <button className="secondary-button" type="button" onClick={() => setShowForm(false)}>
+              <button className="secondary-button" type="button" onClick={() => setShowQuestionForm(false)}>
                 Cancel
               </button>
               <button className="primary-button" type="submit">
@@ -375,22 +373,56 @@ export default function App() {
         </section>
       )}
 
-      <section className="practice-layout">
+      <section className="practice-layout with-categories">
+        <aside className="category-panel" aria-label="Categories">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Browse</p>
+              <h2>Categories</h2>
+            </div>
+            <button className="icon-button" type="button" onClick={() => setShowCategoryForm(true)}>
+              <FolderPlus size={18} aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="category-list">
+            <button
+              className={selectedCategoryId === ALL_CATEGORIES_ID ? "category-item active" : "category-item"}
+              type="button"
+              onClick={() => setSelectedCategoryId(ALL_CATEGORIES_ID)}
+            >
+              <Folder size={18} aria-hidden="true" />
+              <span>All categories</span>
+              <strong>{questions.length}</strong>
+            </button>
+
+            {categories.map((item) => (
+              <button
+                className={selectedCategoryId === item.id ? "category-item active" : "category-item"}
+                key={item.id}
+                type="button"
+                onClick={() => setSelectedCategoryId(item.id)}
+              >
+                <Folder size={18} aria-hidden="true" />
+                <span>{item.name}</span>
+                <strong>{questionsByCategory[item.id] ?? 0}</strong>
+              </button>
+            ))}
+          </div>
+        </aside>
+
         <section className="question-list-panel" aria-label="Questions">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Library</p>
+              <p className="eyebrow">{activeCategoryName}</p>
               <h2>Questions</h2>
             </div>
-            <span className="match-count">
-              <Filter size={16} aria-hidden="true" />
-              {filteredQuestions.length}
-            </span>
+            <span className="match-count">{filteredQuestions.length}</span>
           </div>
 
           {filteredQuestions.length ? (
             <div className="question-list">
-              {filteredQuestions.map((item) => {
+              {filteredQuestions.map((item, index) => {
                 const isSelected = selectedQuestion?.id === item.id;
                 const isFavorite = favorites.has(item.id);
 
@@ -405,11 +437,10 @@ export default function App() {
                       onClick={() => setSelectedId(item.id)}
                     >
                       <span className="card-kicker">
-                        {item.category} / {item.level}
+                        {categoryById.get(item.categoryId) ?? "Uncategorized"} / Question {index + 1}
                       </span>
-                      <h3>{item.title}</h3>
-                      <p>{item.question}</p>
-                      <span className="meta-line">{item.role}</span>
+                      <h3>{item.question}</h3>
+                      <p>{item.answer}</p>
                     </button>
 
                     <button
@@ -428,18 +459,18 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <FileQuestion size={34} aria-hidden="true" />
-              <h3>{questions.length ? "No questions match your filters" : "No questions yet"}</h3>
+              <h3>{questions.length ? "No matching questions" : "No questions yet"}</h3>
               <p>
-                {questions.length
-                  ? "Try clearing filters or search with another keyword."
-                  : "Add your first interview question to start building the handbook."}
+                {categories.length
+                  ? "Add a question to this category or try another search keyword."
+                  : "Create a category first, then add questions into it."}
               </p>
               <button
                 className="primary-button"
                 type="button"
-                onClick={questions.length ? resetFilters : () => setShowForm(true)}
+                onClick={categories.length ? openQuestionForm : () => setShowCategoryForm(true)}
               >
-                {questions.length ? "Clear filters" : "New question"}
+                {categories.length ? "New question" : "New category"}
               </button>
             </div>
           )}
@@ -450,8 +481,10 @@ export default function App() {
             <>
               <div className="answer-panel__header">
                 <div>
-                  <p className="eyebrow">{selectedQuestion.role}</p>
-                  <h2>{selectedQuestion.title}</h2>
+                  <p className="eyebrow">
+                    {categoryById.get(selectedQuestion.categoryId) ?? "Uncategorized"}
+                  </p>
+                  <h2>{selectedQuestion.question}</h2>
                 </div>
                 <button
                   className={favorites.has(selectedQuestion.id) ? "star-button active" : "star-button"}
@@ -467,12 +500,6 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="answer-meta">
-                <span>{selectedQuestion.category}</span>
-                <span>{selectedQuestion.level}</span>
-                <span>{selectedQuestion.source || "Manual"}</span>
-              </div>
-
               <div className="answer-block">
                 <div className="block-heading">
                   <FileQuestion size={18} aria-hidden="true" />
@@ -484,24 +511,16 @@ export default function App() {
               <div className="answer-block answer">
                 <div className="block-heading">
                   <CheckCircle2 size={18} aria-hidden="true" />
-                  Expected answer
+                  Answer
                 </div>
                 <p>{selectedQuestion.answer}</p>
               </div>
-
-              {selectedQuestion.tags.length > 0 && (
-                <div className="tag-row">
-                  {selectedQuestion.tags.map((tag) => (
-                    <span key={tag}>{tag}</span>
-                  ))}
-                </div>
-              )}
             </>
           ) : (
             <div className="empty-state">
               <FileQuestion size={34} aria-hidden="true" />
               <h3>Select a question</h3>
-              <p>Your answer notes will appear here.</p>
+              <p>The answer will appear here.</p>
             </div>
           )}
         </section>
