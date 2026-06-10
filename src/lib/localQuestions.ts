@@ -73,6 +73,21 @@ export function saveLocalQuestion(draft: QuestionDraft) {
   return question;
 }
 
+export function updateLocalQuestion(questionId: string, draft: QuestionDraft) {
+  const current = loadLocalQuestions();
+  const updated = current.map((item) =>
+    item.id === questionId
+      ? {
+          ...item,
+          ...draft,
+        }
+      : item,
+  );
+
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  return updated.find((item) => item.id === questionId) ?? null;
+}
+
 const FAVORITES_KEY = "interview-handbook.favorite-ids";
 
 export function loadFavoriteIds() {

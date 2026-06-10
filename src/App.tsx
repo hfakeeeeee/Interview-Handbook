@@ -6,6 +6,7 @@ import {
   FileQuestion,
   Folder,
   FolderPlus,
+  Pencil,
   Plus,
   Search,
   Star,
@@ -19,6 +20,7 @@ import {
   saveFavoriteIds,
   saveLocalCategory,
   saveLocalQuestion,
+  updateLocalQuestion,
 } from "./lib/localQuestions";
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "./types";
 
@@ -45,6 +47,7 @@ export default function App() {
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -177,18 +180,29 @@ export default function App() {
     }
 
     if (isFirebaseConfigured) {
-      const { createQuestion } = await import("./lib/firebase");
-      await createQuestion(nextDraft);
-      setStatus("Saved question to Firestore");
+      const { createQuestion, updateQuestion } = await import("./lib/firebase");
+
+      if (editingQuestionId) {
+        await updateQuestion(editingQuestionId, nextDraft);
+        setStatus("Updated question in Firestore");
+      } else {
+        await createQuestion(nextDraft);
+        setStatus("Saved question to Firestore");
+      }
     } else {
-      const created = saveLocalQuestion(nextDraft);
+      const created = editingQuestionId
+        ? updateLocalQuestion(editingQuestionId, nextDraft)
+        : saveLocalQuestion(nextDraft);
       setQuestions(loadLocalQuestions());
-      setSelectedCategoryId(created.categoryId);
-      setSelectedId(created.id);
-      setStatus("Saved question locally");
+      if (created) {
+        setSelectedCategoryId(created.categoryId);
+        setSelectedId(created.id);
+      }
+      setStatus(editingQuestionId ? "Updated question locally" : "Saved question locally");
     }
 
     setQuestionDraft(emptyQuestionDraft);
+    setEditingQuestionId(null);
     setShowQuestionForm(false);
   }
 
@@ -205,11 +219,28 @@ export default function App() {
   }
 
   function openQuestionForm() {
+    setEditingQuestionId(null);
     setQuestionDraft({
       ...emptyQuestionDraft,
       categoryId: selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id ?? "" : selectedCategoryId,
     });
     setShowQuestionForm(true);
+  }
+
+  function openEditQuestionForm(question: InterviewQuestion) {
+    setEditingQuestionId(question.id);
+    setQuestionDraft({
+      categoryId: question.categoryId,
+      question: question.question,
+      answer: question.answer,
+    });
+    setShowQuestionForm(true);
+  }
+
+  function closeQuestionForm() {
+    setQuestionDraft(emptyQuestionDraft);
+    setEditingQuestionId(null);
+    setShowQuestionForm(false);
   }
 
   return (
@@ -311,10 +342,10 @@ export default function App() {
         <section className="editor-panel" aria-label="Create question">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Create</p>
-              <h2>Add question and answer</h2>
+              <p className="eyebrow">{editingQuestionId ? "Edit" : "Create"}</p>
+              <h2>{editingQuestionId ? "Edit question and answer" : "Add question and answer"}</h2>
             </div>
-            <button className="icon-button" type="button" onClick={() => setShowQuestionForm(false)}>
+            <button className="icon-button" type="button" onClick={closeQuestionForm}>
               <X size={18} aria-hidden="true" />
             </button>
           </div>
@@ -362,11 +393,11 @@ export default function App() {
             </label>
 
             <div className="form-actions">
-              <button className="secondary-button" type="button" onClick={() => setShowQuestionForm(false)}>
+              <button className="secondary-button" type="button" onClick={closeQuestionForm}>
                 Cancel
               </button>
               <button className="primary-button" type="submit">
-                Save question
+                {editingQuestionId ? "Update question" : "Save question"}
               </button>
             </div>
           </form>
@@ -486,18 +517,29 @@ export default function App() {
                   </p>
                   <h2>{selectedQuestion.question}</h2>
                 </div>
-                <button
-                  className={favorites.has(selectedQuestion.id) ? "star-button active" : "star-button"}
-                  type="button"
-                  onClick={() => toggleFavorite(selectedQuestion.id)}
-                  title="Toggle favorite"
-                  aria-label="Toggle favorite"
-                >
-                  <Star
-                    size={20}
-                    fill={favorites.has(selectedQuestion.id) ? "currentColor" : "none"}
-                  />
-                </button>
+                <div className="answer-actions">
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => openEditQuestionForm(selectedQuestion)}
+                    title="Edit question"
+                    aria-label="Edit question"
+                  >
+                    <Pencil size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    className={favorites.has(selectedQuestion.id) ? "star-button active" : "star-button"}
+                    type="button"
+                    onClick={() => toggleFavorite(selectedQuestion.id)}
+                    title="Toggle favorite"
+                    aria-label="Toggle favorite"
+                  >
+                    <Star
+                      size={20}
+                      fill={favorites.has(selectedQuestion.id) ? "currentColor" : "none"}
+                    />
+                  </button>
+                </div>
               </div>
 
               <div className="answer-block">

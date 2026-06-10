@@ -2,11 +2,13 @@ import { initializeApp, type FirebaseApp } from "firebase/app";
 import {
   addDoc,
   collection,
+  doc,
   getFirestore,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   type Firestore,
 } from "firebase/firestore";
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "../types";
@@ -105,6 +107,17 @@ export async function createQuestion(draft: QuestionDraft) {
   await addDoc(questionsCollection(), {
     ...draft,
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateQuestion(questionId: string, draft: QuestionDraft) {
+  if (!isFirebaseConfigured) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  await updateDoc(doc(questionsCollection(), questionId), {
+    ...draft,
     updatedAt: serverTimestamp(),
   });
 }

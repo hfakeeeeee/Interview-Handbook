@@ -473,6 +473,11 @@ textarea:focus,
   align-items: start;
 }
 
+.answer-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .answer-panel h2 {
   margin-bottom: 0;
   font-size: 1.45rem;

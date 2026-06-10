@@ -9,6 +9,7 @@ Firebase Firestore o free tier.
 - Chon category de load va tim kiem cac cau hoi thuoc category.
 - Tim kiem full text theo question va answer.
 - Xem cau hoi va cau tra loi trong panel rieng de on tap nhanh.
+- Chinh sua category cua question, noi dung question va answer.
 - Danh dau favorite bang localStorage.
 - Them cau hoi moi. Khi chua cau hinh Firebase, du lieu se luu local trong trinh duyet.
 - Khi da cau hinh Firebase, app doc/ghi collection `questions` tren Firestore.
