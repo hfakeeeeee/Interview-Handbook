@@ -261,10 +261,6 @@ export default function App() {
             <Database size={16} aria-hidden="true" />
             {status}
           </span>
-          <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(true)}>
-            <FolderPlus size={18} aria-hidden="true" />
-            New category
-          </button>
           <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
             New question
@@ -404,44 +400,39 @@ export default function App() {
         </section>
       )}
 
-      <section className="practice-layout with-categories">
-        <aside className="category-panel" aria-label="Categories">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Browse</p>
-              <h2>Categories</h2>
-            </div>
-            <button className="icon-button" type="button" onClick={() => setShowCategoryForm(true)}>
-              <FolderPlus size={18} aria-hidden="true" />
-            </button>
-          </div>
+      <section className="category-strip" aria-label="Categories">
+        <div className="category-tabs">
+          <button
+            className={selectedCategoryId === ALL_CATEGORIES_ID ? "category-chip active" : "category-chip"}
+            type="button"
+            onClick={() => setSelectedCategoryId(ALL_CATEGORIES_ID)}
+          >
+            <Folder size={17} aria-hidden="true" />
+            <span>All categories</span>
+            <strong>{questions.length}</strong>
+          </button>
 
-          <div className="category-list">
+          {categories.map((item) => (
             <button
-              className={selectedCategoryId === ALL_CATEGORIES_ID ? "category-item active" : "category-item"}
+              className={selectedCategoryId === item.id ? "category-chip active" : "category-chip"}
+              key={item.id}
               type="button"
-              onClick={() => setSelectedCategoryId(ALL_CATEGORIES_ID)}
+              onClick={() => setSelectedCategoryId(item.id)}
             >
-              <Folder size={18} aria-hidden="true" />
-              <span>All categories</span>
-              <strong>{questions.length}</strong>
+              <Folder size={17} aria-hidden="true" />
+              <span>{item.name}</span>
+              <strong>{questionsByCategory[item.id] ?? 0}</strong>
             </button>
+          ))}
+        </div>
 
-            {categories.map((item) => (
-              <button
-                className={selectedCategoryId === item.id ? "category-item active" : "category-item"}
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedCategoryId(item.id)}
-              >
-                <Folder size={18} aria-hidden="true" />
-                <span>{item.name}</span>
-                <strong>{questionsByCategory[item.id] ?? 0}</strong>
-              </button>
-            ))}
-          </div>
-        </aside>
+        <button className="secondary-button" type="button" onClick={() => setShowCategoryForm(true)}>
+          <FolderPlus size={18} aria-hidden="true" />
+          New category
+        </button>
+      </section>
 
+      <section className="practice-layout">
         <section className="question-list-panel" aria-label="Questions">
           <div className="section-heading">
             <div>
