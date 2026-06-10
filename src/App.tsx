@@ -10,10 +10,12 @@ import {
   FileQuestion,
   Folder,
   FolderPlus,
+  Moon,
   Pencil,
   Plus,
   Search,
   Star,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
@@ -34,6 +36,7 @@ import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "
 
 const ALL_CATEGORIES_ID = "all";
 const QUESTIONS_PER_PAGE = 10;
+const THEME_STORAGE_KEY = "interview-handbook.theme";
 
 const emptyQuestionDraft: QuestionDraft = {
   categoryId: "",
@@ -67,6 +70,15 @@ export default function App() {
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+
+    if (storedTheme === "light" || storedTheme === "dark") {
+      return storedTheme;
+    }
+
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -112,6 +124,11 @@ export default function App() {
   useEffect(() => {
     saveFavoriteIds(favorites);
   }, [favorites]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     if (selectedCategoryId !== ALL_CATEGORIES_ID && !categories.some((item) => item.id === selectedCategoryId)) {
@@ -381,6 +398,15 @@ export default function App() {
             <Database size={16} aria-hidden="true" />
             {status}
           </span>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
           <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
             New question
