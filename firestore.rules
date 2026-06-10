@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /questions/{questionId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly([
+          'title',
+          'question',
+          'answer',
+          'category',
+          'role',
+          'level',
+          'tags',
+          'source',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.question is string
+        && request.resource.data.answer is string
+        && request.resource.data.category is string
+        && request.resource.data.role is string
+        && request.resource.data.level in ['Intern', 'Junior', 'Middle', 'Senior']
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 8;
+
+      allow update, delete: if false;
+    }
+  }
+}
