@@ -15,6 +15,8 @@ with Firebase Firestore as the database.
 - Export selected/page/category/all questions as an AI translation prompt that
   returns Bulk Import-compatible `Q:` / `A:` output.
 - Bulk Import lets you choose which language the pasted questions should fill.
+- Bulk Import updates existing questions when an imported block includes `ID:`,
+  and creates new questions when the block has no `ID:`.
 - Edit a question's category, question text, and answer text.
 - Delete questions with confirmation.
 - Mark questions as favorites in localStorage.

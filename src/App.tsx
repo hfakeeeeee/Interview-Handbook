@@ -61,6 +61,11 @@ const emptyCategoryDraft: CategoryDraft = {
 };
 
 type ExportScope = "all" | "category" | "page" | "selected";
+type ImportedQuestion = {
+  id?: string;
+  question: string;
+  answer: string;
+};
 
 function sortCategories(categories: Category[]) {
   return [...categories].sort((first, second) => first.name.localeCompare(second.name));
@@ -222,15 +227,19 @@ function cleanImportedText(value: string) {
 function parseMarkerQuestions(value: string) {
   const questionLabel = String.raw`(?:Q(?:uestion)?|Cau hoi|Câu hỏi)`;
   const answerLabel = String.raw`(?:A(?:nswer)?|Tra loi|Trả lời)`;
+  const hasImportIds = /^\s*ID\s*:\s*[^\n]+/im.test(value);
+  const splitPattern = hasImportIds
+    ? `(?=^\\s*ID\\s*:\\s*[^\\n]+\\n\\s*${questionLabel}\\s*\\d*\\s*:\\s*)`
+    : `(?=^\\s*${questionLabel}\\s*\\d*\\s*:\\s*)`;
   const chunks = value
-    .split(new RegExp(`(?=^\\s*${questionLabel}\\s*\\d*\\s*[:.-]\\s*)`, "gim"))
+    .split(new RegExp(splitPattern, "gim"))
     .map((chunk) => chunk.trim())
     .filter(Boolean);
 
   return chunks.flatMap((chunk) => {
     const match = chunk.match(
       new RegExp(
-        `^\\s*${questionLabel}\\s*\\d*\\s*[:.-]\\s*([\\s\\S]*?)\\n\\s*${answerLabel}\\s*\\d*\\s*[:.-]\\s*([\\s\\S]*)$`,
+        `^\\s*(?:ID\\s*:\\s*([^\\n]+)\\n\\s*)?${questionLabel}\\s*\\d*\\s*:\\s*([\\s\\S]*?)\\n\\s*${answerLabel}\\s*\\d*\\s*:\\s*([\\s\\S]*)$`,
         "i",
       ),
     );
@@ -239,13 +248,14 @@ function parseMarkerQuestions(value: string) {
       return [];
     }
 
-    const question = cleanImportedText(match[1]);
-    const answer = cleanImportedText(match[2]);
-    return question && answer ? [{ question, answer }] : [];
+    const id = match[1]?.trim();
+    const question = cleanImportedText(match[2]);
+    const answer = cleanImportedText(match[3]);
+    return question && answer ? [{ id, question, answer }] : [];
   });
 }
 
-function parseMarkdownQuestions(value: string) {
+function parseMarkdownQuestions(value: string): ImportedQuestion[] {
   const headings = [...value.matchAll(/^#{2,6}\s+(.+)$/gm)];
 
   return headings.flatMap((heading, index) => {
@@ -273,7 +283,7 @@ function formatQuestionForPrompt(question: InterviewQuestion, language: Language
   const questionText = getLocalizedText(question.question, language).text;
   const answerText = getLocalizedText(question.answer, language).text;
 
-  return [`Q${index}: ${questionText}`, `A${index}:`, answerText].join("\n");
+  return [`ID: ${question.id}`, `Q${index}: ${questionText}`, `A${index}:`, answerText].join("\n");
 }
 
 function buildTranslationPrompt({
@@ -296,14 +306,22 @@ function buildTranslationPrompt({
   return [
     `Translate the following interview questions and answers from ${sourceLabel} to ${targetLabel}.`,
     "Keep technical terms accurate.",
-    "Preserve Markdown formatting, tables, lists, inline code, and code blocks.",
-    "Return only the translated content in this exact format so I can paste it into my bulk import tool:",
+    "Keep each ID unchanged.",
+    "Write the translated questions and answers as Markdown source, not rendered prose.",
+    "Use Markdown where helpful: bullet lists, numbered lists, tables, bold, italic, inline code, and code examples.",
+    "Return only one single plain-text code block containing all translated items so I can copy once.",
+    "For code examples inside an answer, use Markdown tilde fences such as ~~~java and ~~~ instead of triple backticks.",
+    "Use this exact format inside that single code block so I can paste it into my bulk import tool:",
     "",
+    "```text",
+    "ID: <same ID from source>",
     "Q: <translated question>",
     "A: <translated answer>",
     "",
+    "ID: <same ID from source>",
     "Q: <translated question>",
     "A: <translated answer>",
+    "```",
     "",
     `Category: ${categoryName}`,
     "",
@@ -584,35 +602,75 @@ export default function App() {
     const categoryId =
       bulkImportCategoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
-    const drafts: QuestionDraft[] = parsedBulkQuestions.map((item) => ({
+    const questionById = new Map(questions.map((item) => [item.id, item]));
+    const missingIds = parsedBulkQuestions
+      .filter((item) => item.id && !questionById.has(item.id))
+      .map((item) => item.id);
+    const newQuestions = parsedBulkQuestions.filter((item) => !item.id);
+    const updates = parsedBulkQuestions.flatMap((item) => {
+      const current = item.id ? questionById.get(item.id) : undefined;
+
+      if (!current) {
+        return [];
+      }
+
+      return [
+        {
+          id: current.id,
+          draft: {
+            categoryId: current.categoryId,
+            question: {
+              ...current.question,
+              [bulkImportLanguage]: item.question,
+            },
+            answer: {
+              ...current.answer,
+              [bulkImportLanguage]: item.answer,
+            },
+          },
+        },
+      ];
+    });
+    const drafts: QuestionDraft[] = newQuestions.map((item) => ({
       ...createLocalizedDraft(item.question, item.answer, bulkImportLanguage),
       categoryId: categoryId ?? "",
     }));
 
-    if (!categoryId) {
-      setStatus("Select a category before importing");
-      return;
-    }
-
-    if (!drafts.length) {
+    if (!parsedBulkQuestions.length) {
       setStatus("No importable questions found");
       return;
     }
 
+    if (missingIds.length) {
+      setStatus(`Could not find ${missingIds.length} question IDs from the import`);
+      return;
+    }
+
+    if (newQuestions.length && !categoryId) {
+      setStatus("Select a category before importing");
+      return;
+    }
+
     if (isFirebaseConfigured) {
-      const { createQuestion } = await import("./lib/firebase");
-      await Promise.all(drafts.map((draft) => createQuestion(draft)));
-      setStatus(`Imported ${drafts.length} questions to Firestore`);
+      const { createQuestion, updateQuestion } = await import("./lib/firebase");
+      await Promise.all([
+        ...drafts.map((draft) => createQuestion(draft)),
+        ...updates.map((item) => updateQuestion(item.id, item.draft)),
+      ]);
+      setStatus(`Imported ${drafts.length} new and updated ${updates.length} in Firestore`);
     } else {
       const created = saveLocalQuestions(drafts);
+      updates.forEach((item) => updateLocalQuestion(item.id, item.draft));
       setQuestions(loadLocalQuestions());
 
       if (created[0]) {
         setSelectedCategoryId(created[0].categoryId);
         setSelectedId(created[0].id);
+      } else if (updates[0]) {
+        setSelectedId(updates[0].id);
       }
 
-      setStatus(`Imported ${drafts.length} questions locally`);
+      setStatus(`Imported ${drafts.length} new and updated ${updates.length} locally`);
     }
 
     setBulkImportText("");
@@ -1041,6 +1099,10 @@ export default function App() {
                   onChange={(event) => setBulkImportText(event.target.value)}
                   rows={16}
                   placeholder={[
+                    "ID: optional-existing-question-id",
+                    "Q: Translated or updated question",
+                    "A: Translated or updated answer...",
+                    "",
                     "Q: What is Java?",
                     "A: Java is a programming language...",
                     "",
