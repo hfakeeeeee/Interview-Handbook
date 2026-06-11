@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Copy,
   Database,
   FileQuestion,
   Folder,
@@ -58,6 +59,8 @@ const emptyQuestionDraft: QuestionDraft = {
 const emptyCategoryDraft: CategoryDraft = {
   name: "",
 };
+
+type ExportScope = "all" | "category" | "page" | "selected";
 
 function sortCategories(categories: Category[]) {
   return [...categories].sort((first, second) => first.name.localeCompare(second.name));
@@ -114,6 +117,7 @@ const translations: Record<Language, Record<string, string>> = {
     editQuestion: "Edit question and answer",
     enterAnswer: "Enter the answer, key points, examples, trade-offs...",
     enterQuestion: "Enter the interview question",
+    exportPrompt: "Export prompt",
     fallbackEnglish: "English fallback",
     fallbackVietnamese: "Vietnamese fallback",
     favorites: "Favorites",
@@ -168,6 +172,7 @@ const translations: Record<Language, Record<string, string>> = {
     editQuestion: "Chỉnh sửa câu hỏi và câu trả lời",
     enterAnswer: "Nhập câu trả lời, ý chính, ví dụ, trade-off...",
     enterQuestion: "Nhập câu hỏi phỏng vấn",
+    exportPrompt: "Xuất prompt",
     fallbackEnglish: "Đang hiển thị bản tiếng Anh",
     fallbackVietnamese: "Đang hiển thị bản tiếng Việt",
     favorites: "Yêu thích",
@@ -264,6 +269,50 @@ function parseBulkQuestions(value: string) {
   return markerQuestions.length ? markerQuestions : parseMarkdownQuestions(normalized);
 }
 
+function formatQuestionForPrompt(question: InterviewQuestion, language: Language, index: number) {
+  const questionText = getLocalizedText(question.question, language).text;
+  const answerText = getLocalizedText(question.answer, language).text;
+
+  return [`Q${index}: ${questionText}`, `A${index}:`, answerText].join("\n");
+}
+
+function buildTranslationPrompt({
+  categoryName,
+  questions,
+  sourceLanguage,
+  targetLanguage,
+}: {
+  categoryName: string;
+  questions: InterviewQuestion[];
+  sourceLanguage: Language;
+  targetLanguage: Language;
+}) {
+  const sourceLabel = languageLabels[sourceLanguage];
+  const targetLabel = languageLabels[targetLanguage];
+  const entries = questions
+    .map((question, index) => formatQuestionForPrompt(question, sourceLanguage, index + 1))
+    .join("\n\n---\n\n");
+
+  return [
+    `Translate the following interview questions and answers from ${sourceLabel} to ${targetLabel}.`,
+    "Keep technical terms accurate.",
+    "Preserve Markdown formatting, tables, lists, inline code, and code blocks.",
+    "Return only the translated content in this exact format so I can paste it into my bulk import tool:",
+    "",
+    "Q: <translated question>",
+    "A: <translated answer>",
+    "",
+    "Q: <translated question>",
+    "A: <translated answer>",
+    "",
+    `Category: ${categoryName}`,
+    "",
+    "Source content:",
+    "",
+    entries,
+  ].join("\n");
+}
+
 export default function App() {
   const [categories, setCategories] = useState<Category[]>(() => sortCategories(loadLocalCategories()));
   const [questions, setQuestions] = useState<InterviewQuestion[]>(() => loadLocalQuestions());
@@ -275,11 +324,15 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
+  const [showExportForm, setShowExportForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
   const [questionFormLanguage, setQuestionFormLanguage] = useState<Language>("vi");
   const [bulkImportCategoryId, setBulkImportCategoryId] = useState("");
+  const [bulkImportLanguage, setBulkImportLanguage] = useState<Language>("en");
   const [bulkImportText, setBulkImportText] = useState("");
+  const [exportScope, setExportScope] = useState<ExportScope>("selected");
+  const [exportTargetLanguage, setExportTargetLanguage] = useState<Language>("en");
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -401,6 +454,30 @@ export default function App() {
       : categoryById.get(selectedCategoryId) ?? "Uncategorized";
   const selectedQuestionDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.question, language) : null;
   const selectedAnswerDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.answer, language) : null;
+  const exportQuestions = useMemo(() => {
+    switch (exportScope) {
+      case "all":
+        return questions;
+      case "category":
+        return filteredQuestions;
+      case "page":
+        return pagedQuestions;
+      case "selected":
+        return selectedQuestion ? [selectedQuestion] : [];
+      default:
+        return [];
+    }
+  }, [exportScope, filteredQuestions, pagedQuestions, questions, selectedQuestion]);
+  const exportPrompt = useMemo(
+    () =>
+      buildTranslationPrompt({
+        categoryName: activeCategoryName,
+        questions: exportQuestions,
+        sourceLanguage: language,
+        targetLanguage: exportTargetLanguage,
+      }),
+    [activeCategoryName, exportQuestions, exportTargetLanguage, language],
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -508,7 +585,7 @@ export default function App() {
       bulkImportCategoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
     const drafts: QuestionDraft[] = parsedBulkQuestions.map((item) => ({
-      ...createLocalizedDraft(item.question, item.answer, language),
+      ...createLocalizedDraft(item.question, item.answer, bulkImportLanguage),
       categoryId: categoryId ?? "",
     }));
 
@@ -642,6 +719,7 @@ export default function App() {
     setBulkImportCategoryId(
       selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id ?? "" : selectedCategoryId,
     );
+    setBulkImportLanguage(language);
     setBulkImportText("");
     setShowBulkImportForm(true);
   }
@@ -665,8 +743,20 @@ export default function App() {
 
   function closeBulkImportForm() {
     setBulkImportCategoryId("");
+    setBulkImportLanguage(language);
     setBulkImportText("");
     setShowBulkImportForm(false);
+  }
+
+  function openExportForm() {
+    setExportTargetLanguage(language === "en" ? "vi" : "en");
+    setExportScope(selectedQuestion ? "selected" : "page");
+    setShowExportForm(true);
+  }
+
+  async function copyExportPrompt() {
+    await navigator.clipboard.writeText(exportPrompt);
+    setStatus(`Copied export prompt for ${exportQuestions.length} questions`);
   }
 
   return (
@@ -715,6 +805,10 @@ export default function App() {
           <button className="secondary-button" type="button" onClick={openBulkImportForm}>
             <ClipboardList size={18} aria-hidden="true" />
             {t.bulkImport}
+          </button>
+          <button className="secondary-button" type="button" onClick={openExportForm}>
+            <Copy size={18} aria-hidden="true" />
+            {t.exportPrompt}
           </button>
           <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
@@ -912,20 +1006,33 @@ export default function App() {
             </div>
 
             <form className="question-form" onSubmit={handleBulkImportSubmit}>
-              <label>
-                {t.category}
-                <select
-                  value={bulkImportCategoryId}
-                  onChange={(event) => setBulkImportCategoryId(event.target.value)}
-                >
-                  <option value="">{t.selectCategory}</option>
-                  {categories.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="export-grid">
+                <label>
+                  {t.category}
+                  <select
+                    value={bulkImportCategoryId}
+                    onChange={(event) => setBulkImportCategoryId(event.target.value)}
+                  >
+                    <option value="">{t.selectCategory}</option>
+                    {categories.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Import language
+                  <select
+                    value={bulkImportLanguage}
+                    onChange={(event) => setBulkImportLanguage(event.target.value as Language)}
+                  >
+                    <option value="en">{languageLabels.en}</option>
+                    <option value="vi">{languageLabels.vi}</option>
+                  </select>
+                </label>
+              </div>
 
               <label>
                 {t.questions}
@@ -959,6 +1066,72 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+
+      {showExportForm && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowExportForm(false)}>
+          <section
+            className="modal-panel"
+            aria-label="Export translation prompt"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Export</p>
+                <h2>{t.exportPrompt}</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowExportForm(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="export-grid">
+              <label>
+                Scope
+                <select value={exportScope} onChange={(event) => setExportScope(event.target.value as ExportScope)}>
+                  <option value="selected">Selected question</option>
+                  <option value="page">Current page</option>
+                  <option value="category">Current category/search</option>
+                  <option value="all">All questions</option>
+                </select>
+              </label>
+
+              <label>
+                Target language
+                <select
+                  value={exportTargetLanguage}
+                  onChange={(event) => setExportTargetLanguage(event.target.value as Language)}
+                >
+                  <option value="en">{languageLabels.en}</option>
+                  <option value="vi">{languageLabels.vi}</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              Prompt
+              <textarea readOnly value={exportPrompt} rows={16} />
+            </label>
+
+            <div className="bulk-import-meta">
+              <span>
+                {exportQuestions.length} {exportQuestions.length === 1 ? t.question : t.questions}
+              </span>
+            </div>
+
+            <div className="form-actions">
+              <button className="secondary-button" type="button" onClick={() => setShowExportForm(false)}>
+                {t.cancel}
+              </button>
+              <button className="primary-button" type="button" onClick={copyExportPrompt} disabled={!exportQuestions.length}>
+                <Copy size={16} aria-hidden="true" />
+                Copy prompt
+              </button>
+            </div>
           </section>
         </div>
       )}
