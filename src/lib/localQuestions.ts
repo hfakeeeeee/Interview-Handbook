@@ -1,4 +1,5 @@
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "../types";
+import { normalizeLocalizedText } from "./localization";
 
 const STORAGE_KEY = "interview-handbook.local-questions";
 const CATEGORIES_STORAGE_KEY = "interview-handbook.local-categories";
@@ -71,11 +72,11 @@ export function loadLocalQuestions() {
       .map((item) => ({
         id: item.id,
         categoryId: String(item.categoryId ?? UNCATEGORIZED_ID),
-        question: String(item.question ?? ""),
-        answer: String(item.answer ?? ""),
+        question: normalizeLocalizedText(item.question, "vi"),
+        answer: normalizeLocalizedText(item.answer, "vi"),
         createdAt: item.createdAt,
       }))
-      .filter((item) => item.question && item.answer);
+      .filter((item) => item.question.en || item.question.vi || item.answer.en || item.answer.vi);
   } catch {
     return [];
   }

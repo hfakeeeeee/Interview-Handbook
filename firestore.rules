@@ -1,6 +1,31 @@
 rules_version = '2';
 
 service cloud.firestore {
+  function localizedText(value) {
+    return value is map
+      && value.keys().hasOnly(['en', 'vi'])
+      && value.en is string
+      && value.vi is string;
+  }
+
+  function validQuestionPayload(data) {
+    return data.keys().hasOnly([
+        'categoryId',
+        'question',
+        'answer',
+        'createdAt',
+        'updatedAt'
+      ])
+      && data.categoryId is string
+      && data.categoryId.size() > 0
+      && localizedText(data.question)
+      && localizedText(data.answer)
+      && (
+        (data.question.en.size() > 0 && data.answer.en.size() > 0)
+        || (data.question.vi.size() > 0 && data.answer.vi.size() > 0)
+      );
+  }
+
   match /databases/{database}/documents {
     match /categories/{categoryId} {
       allow read: if true;
@@ -27,33 +52,8 @@ service cloud.firestore {
 
     match /questions/{questionId} {
       allow read: if true;
-      allow create: if request.resource.data.keys().hasOnly([
-          'categoryId',
-          'question',
-          'answer',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.categoryId is string
-        && request.resource.data.categoryId.size() > 0
-        && request.resource.data.question is string
-        && request.resource.data.question.size() > 0
-        && request.resource.data.answer is string
-        && request.resource.data.answer.size() > 0;
-
-      allow update: if request.resource.data.keys().hasOnly([
-          'categoryId',
-          'question',
-          'answer',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.categoryId is string
-        && request.resource.data.categoryId.size() > 0
-        && request.resource.data.question is string
-        && request.resource.data.question.size() > 0
-        && request.resource.data.answer is string
-        && request.resource.data.answer.size() > 0;
+      allow create: if validQuestionPayload(request.resource.data);
+      allow update: if validQuestionPayload(request.resource.data);
 
       allow delete: if true;
     }

@@ -8,6 +8,7 @@ with Firebase Firestore as the database.
 - Create categories, then add question/answer entries into each category.
 - Edit and delete empty categories.
 - Browse and search questions by category.
+- Switch UI and question/answer content between English and Vietnamese.
 - Search full text across question and answer content.
 - View questions and answers in a focused reading panel.
 - Answers support Markdown, including comparison tables.
@@ -71,12 +72,22 @@ Document in `questions`:
 ```json
 {
   "categoryId": "<category document id>",
-  "question": "Explain the Java event loop...",
-  "answer": "JavaScript runs on a main thread...",
+  "question": {
+    "en": "Explain Java generics.",
+    "vi": "Giải thích Java generics."
+  },
+  "answer": {
+    "en": "Generics add compile-time type safety...",
+    "vi": "Generics giúp kiểm tra kiểu ở compile time..."
+  },
   "createdAt": "server timestamp",
   "updatedAt": "server timestamp"
 }
 ```
+
+Older string-based question/answer documents are treated as Vietnamese content
+when read by the app, so existing data can be filled with English translations
+gradually.
 
 The `firestore.rules` file contains starter rules for public read and basic
 schema validation. If this becomes a real multi-user app, add Firebase

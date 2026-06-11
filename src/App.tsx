@@ -34,16 +34,25 @@ import {
   updateLocalCategory,
   updateLocalQuestion,
 } from "./lib/localQuestions";
-import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "./types";
+import {
+  emptyLocalizedText,
+  getLocalizedText,
+  hasLocalizedPair,
+  languageLabels,
+  localizedSearchText,
+  normalizeLocalizedText,
+} from "./lib/localization";
+import type { Category, CategoryDraft, InterviewQuestion, Language, QuestionDraft } from "./types";
 
 const ALL_CATEGORIES_ID = "all";
 const QUESTIONS_PER_PAGE = 10;
 const THEME_STORAGE_KEY = "interview-handbook.theme";
+const LANGUAGE_STORAGE_KEY = "interview-handbook.language";
 
 const emptyQuestionDraft: QuestionDraft = {
   categoryId: "",
-  question: "",
-  answer: "",
+  question: emptyLocalizedText(),
+  answer: emptyLocalizedText(),
 };
 
 const emptyCategoryDraft: CategoryDraft = {
@@ -53,6 +62,145 @@ const emptyCategoryDraft: CategoryDraft = {
 function sortCategories(categories: Category[]) {
   return [...categories].sort((first, second) => first.name.localeCompare(second.name));
 }
+
+function createLocalizedDraft(question: string, answer: string, language: Language) {
+  return {
+    answer: {
+      ...emptyLocalizedText(),
+      [language]: answer,
+    },
+    question: {
+      ...emptyLocalizedText(),
+      [language]: question,
+    },
+  };
+}
+
+function updateLocalizedValue(
+  draft: QuestionDraft,
+  field: "answer" | "question",
+  language: Language,
+  value: string,
+) {
+  return {
+    ...draft,
+    [field]: {
+      ...draft[field],
+      [language]: value,
+    },
+  };
+}
+
+const translations: Record<Language, Record<string, string>> = {
+  en: {
+    addCategory: "Add category",
+    addEnglishVersion: "Add English version",
+    addQuestion: "Add question and answer",
+    addVietnameseVersion: "Add Vietnamese version",
+    allCategories: "All categories",
+    answer: "Answer",
+    bulkImport: "Bulk import",
+    cancel: "Cancel",
+    categories: "Categories",
+    category: "Category",
+    categoryName: "Category name",
+    categoryRequired: "Category name is required",
+    create: "Create",
+    deleteCategoryConfirm: "Delete category",
+    deleteQuestionConfirm: "Delete this question? This action cannot be undone.",
+    detected: "detected",
+    edit: "Edit",
+    editCategory: "Edit category",
+    editQuestion: "Edit question and answer",
+    enterAnswer: "Enter the answer, key points, examples, trade-offs...",
+    enterQuestion: "Enter the interview question",
+    fallbackEnglish: "English fallback",
+    fallbackVietnamese: "Vietnamese fallback",
+    favorites: "Favorites",
+    importQuestions: "Import questions",
+    languageEnglish: "English",
+    languageVietnamese: "Vietnamese",
+    newCategory: "New category",
+    newQuestion: "New question",
+    noMatchingQuestions: "No matching questions",
+    noQuestionsYet: "No questions yet",
+    noQuestionsHint: "Add a question to this category or try another search keyword.",
+    noQuestionsStartHint: "Create a category first, then add questions into it.",
+    next: "Next",
+    page: "Page",
+    practiceByCategory: "Practice by category.",
+    previous: "Previous",
+    question: "Question",
+    questions: "Questions",
+    questionRequired: "Add at least one complete English or Vietnamese question and answer",
+    saveCategory: "Save category",
+    saveQuestion: "Save question",
+    searchIn: "Search in",
+    selectCategory: "Select category",
+    selectedFallback: "This entry is shown in the available language.",
+    selectQuestion: "Select a question",
+    answerWillAppear: "The answer will appear here.",
+    showAll: "Show all",
+    showLess: "Show less",
+    updateCategory: "Update category",
+    updateQuestion: "Update question",
+    visibleQuestions: "Visible questions",
+  },
+  vi: {
+    addCategory: "Thêm danh mục",
+    addEnglishVersion: "Thêm bản tiếng Anh",
+    addQuestion: "Thêm câu hỏi và câu trả lời",
+    addVietnameseVersion: "Thêm bản tiếng Việt",
+    allCategories: "Tất cả danh mục",
+    answer: "Câu trả lời",
+    bulkImport: "Nhập hàng loạt",
+    cancel: "Hủy",
+    categories: "Danh mục",
+    category: "Danh mục",
+    categoryName: "Tên danh mục",
+    categoryRequired: "Tên danh mục là bắt buộc",
+    create: "Tạo mới",
+    deleteCategoryConfirm: "Xóa danh mục",
+    deleteQuestionConfirm: "Xóa câu hỏi này? Hành động này không thể hoàn tác.",
+    detected: "được nhận diện",
+    edit: "Chỉnh sửa",
+    editCategory: "Chỉnh sửa danh mục",
+    editQuestion: "Chỉnh sửa câu hỏi và câu trả lời",
+    enterAnswer: "Nhập câu trả lời, ý chính, ví dụ, trade-off...",
+    enterQuestion: "Nhập câu hỏi phỏng vấn",
+    fallbackEnglish: "Đang hiển thị bản tiếng Anh",
+    fallbackVietnamese: "Đang hiển thị bản tiếng Việt",
+    favorites: "Yêu thích",
+    importQuestions: "Nhập câu hỏi",
+    languageEnglish: "Tiếng Anh",
+    languageVietnamese: "Tiếng Việt",
+    newCategory: "Danh mục mới",
+    newQuestion: "Câu hỏi mới",
+    noMatchingQuestions: "Không có câu hỏi phù hợp",
+    noQuestionsYet: "Chưa có câu hỏi",
+    noQuestionsHint: "Thêm câu hỏi vào danh mục này hoặc thử từ khóa khác.",
+    noQuestionsStartHint: "Tạo danh mục trước, rồi thêm câu hỏi vào đó.",
+    next: "Tiếp",
+    page: "Trang",
+    practiceByCategory: "Ôn luyện theo danh mục.",
+    previous: "Trước",
+    question: "Câu hỏi",
+    questions: "Câu hỏi",
+    questionRequired: "Thêm ít nhất một cặp câu hỏi và câu trả lời tiếng Anh hoặc tiếng Việt",
+    saveCategory: "Lưu danh mục",
+    saveQuestion: "Lưu câu hỏi",
+    searchIn: "Tìm trong",
+    selectCategory: "Chọn danh mục",
+    selectedFallback: "Mục này đang hiển thị bằng ngôn ngữ có sẵn.",
+    selectQuestion: "Chọn một câu hỏi",
+    answerWillAppear: "Câu trả lời sẽ hiển thị ở đây.",
+    showAll: "Hiện tất cả",
+    showLess: "Thu gọn",
+    updateCategory: "Cập nhật danh mục",
+    updateQuestion: "Cập nhật câu hỏi",
+    visibleQuestions: "Câu hỏi hiển thị",
+  },
+};
 
 function MarkdownContent({ value }: { value: string }) {
   return (
@@ -129,6 +277,7 @@ export default function App() {
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
+  const [questionFormLanguage, setQuestionFormLanguage] = useState<Language>("vi");
   const [bulkImportCategoryId, setBulkImportCategoryId] = useState("");
   const [bulkImportText, setBulkImportText] = useState("");
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
@@ -143,7 +292,12 @@ export default function App() {
 
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
+  const [language, setLanguage] = useState<Language>(() => {
+    const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return storedLanguage === "en" || storedLanguage === "vi" ? storedLanguage : "en";
+  });
   const [status, setStatus] = useState("");
+  const t = translations[language];
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -195,6 +349,10 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  }, [language]);
+
+  useEffect(() => {
     if (selectedCategoryId !== ALL_CATEGORIES_ID && !categories.some((item) => item.id === selectedCategoryId)) {
       setSelectedCategoryId(ALL_CATEGORIES_ID);
     }
@@ -218,7 +376,7 @@ export default function App() {
       const inSelectedCategory =
         selectedCategoryId === ALL_CATEGORIES_ID || item.categoryId === selectedCategoryId;
       const matchesSearch =
-        !keyword || [item.question, item.answer].join(" ").toLowerCase().includes(keyword);
+        !keyword || localizedSearchText(item.question, item.answer).toLowerCase().includes(keyword);
 
       return inSelectedCategory && matchesSearch;
     });
@@ -239,8 +397,10 @@ export default function App() {
   const hasSearch = search.trim().length > 0;
   const activeCategoryName =
     selectedCategoryId === ALL_CATEGORIES_ID
-      ? "All categories"
+      ? t.allCategories
       : categoryById.get(selectedCategoryId) ?? "Uncategorized";
+  const selectedQuestionDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.question, language) : null;
+  const selectedAnswerDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.answer, language) : null;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -260,7 +420,7 @@ export default function App() {
     };
 
     if (!nextDraft.name) {
-      setStatus("Category name is required");
+      setStatus(t.categoryRequired);
       return;
     }
 
@@ -297,14 +457,20 @@ export default function App() {
       questionDraft.categoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
 
-    const nextDraft = {
+    const nextDraft: QuestionDraft = {
       categoryId: categoryId ?? "",
-      question: questionDraft.question.trim(),
-      answer: questionDraft.answer.trim(),
+      question: {
+        en: questionDraft.question.en.trim(),
+        vi: questionDraft.question.vi.trim(),
+      },
+      answer: {
+        en: questionDraft.answer.en.trim(),
+        vi: questionDraft.answer.vi.trim(),
+      },
     };
 
-    if (!nextDraft.categoryId || !nextDraft.question || !nextDraft.answer) {
-      setStatus("Category, question, and answer are required");
+    if (!nextDraft.categoryId || !hasLocalizedPair(nextDraft.question, nextDraft.answer)) {
+      setStatus(t.questionRequired);
       return;
     }
 
@@ -341,8 +507,8 @@ export default function App() {
     const categoryId =
       bulkImportCategoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
-    const drafts = parsedBulkQuestions.map((item) => ({
-      ...item,
+    const drafts: QuestionDraft[] = parsedBulkQuestions.map((item) => ({
+      ...createLocalizedDraft(item.question, item.answer, language),
       categoryId: categoryId ?? "",
     }));
 
@@ -390,7 +556,7 @@ export default function App() {
   }
 
   async function handleDeleteQuestion(question: InterviewQuestion) {
-    const confirmed = window.confirm("Delete this question? This action cannot be undone.");
+    const confirmed = window.confirm(t.deleteQuestionConfirm);
 
     if (!confirmed) {
       return;
@@ -464,6 +630,7 @@ export default function App() {
 
   function openQuestionForm() {
     setEditingQuestionId(null);
+    setQuestionFormLanguage(language);
     setQuestionDraft({
       ...emptyQuestionDraft,
       categoryId: selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id ?? "" : selectedCategoryId,
@@ -479,12 +646,13 @@ export default function App() {
     setShowBulkImportForm(true);
   }
 
-  function openEditQuestionForm(question: InterviewQuestion) {
+  function openEditQuestionForm(question: InterviewQuestion, targetLanguage = language) {
     setEditingQuestionId(question.id);
+    setQuestionFormLanguage(targetLanguage);
     setQuestionDraft({
       categoryId: question.categoryId,
-      question: question.question,
-      answer: question.answer,
+      question: normalizeLocalizedText(question.question, "vi"),
+      answer: normalizeLocalizedText(question.answer, "vi"),
     });
     setShowQuestionForm(true);
   }
@@ -510,7 +678,7 @@ export default function App() {
           </div>
           <div>
             <p className="eyebrow">Interview Handbook</p>
-            <h1>Practice by category.</h1>
+            <h1>{t.practiceByCategory}</h1>
           </div>
         </div>
 
@@ -528,13 +696,29 @@ export default function App() {
           >
             {theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
           </button>
+          <div className="segmented-control" aria-label="Language">
+            <button
+              className={language === "en" ? "active" : ""}
+              type="button"
+              onClick={() => setLanguage("en")}
+            >
+              EN
+            </button>
+            <button
+              className={language === "vi" ? "active" : ""}
+              type="button"
+              onClick={() => setLanguage("vi")}
+            >
+              VI
+            </button>
+          </div>
           <button className="secondary-button" type="button" onClick={openBulkImportForm}>
             <ClipboardList size={18} aria-hidden="true" />
-            Bulk import
+            {t.bulkImport}
           </button>
           <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
-            New question
+            {t.newQuestion}
           </button>
         </div>
       </header>
@@ -542,15 +726,15 @@ export default function App() {
       <section className="summary-grid" aria-label="Question summary">
         <div className="summary-item">
           <span>{categories.length}</span>
-          <p>Categories</p>
+          <p>{t.categories}</p>
         </div>
         <div className="summary-item">
           <span>{filteredQuestions.length}</span>
-          <p>Visible questions</p>
+          <p>{t.visibleQuestions}</p>
         </div>
         <div className="summary-item">
           <span>{favoriteQuestions}</span>
-          <p>Favorites</p>
+          <p>{t.favorites}</p>
         </div>
       </section>
 
@@ -560,7 +744,7 @@ export default function App() {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder={`Search in ${activeCategoryName}...`}
+            placeholder={`${t.searchIn} ${activeCategoryName}...`}
           />
         </div>
 
@@ -582,8 +766,8 @@ export default function App() {
           >
             <div className="section-heading">
               <div>
-                <p className="eyebrow">{editingCategoryId ? "Edit" : "Create"}</p>
-                <h2>{editingCategoryId ? "Edit category" : "Add category"}</h2>
+                <p className="eyebrow">{editingCategoryId ? t.edit : t.create}</p>
+                <h2>{editingCategoryId ? t.editCategory : t.addCategory}</h2>
               </div>
               <button className="icon-button" type="button" onClick={closeCategoryForm}>
                 <X size={18} aria-hidden="true" />
@@ -592,7 +776,7 @@ export default function App() {
 
             <form className="question-form" onSubmit={handleCategorySubmit}>
               <label>
-                Category name
+                {t.categoryName}
                 <input
                   value={categoryDraft.name}
                   onChange={(event) => setCategoryDraft({ name: event.target.value })}
@@ -602,10 +786,10 @@ export default function App() {
 
               <div className="form-actions">
                 <button className="secondary-button" type="button" onClick={closeCategoryForm}>
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button className="primary-button" type="submit">
-                  {editingCategoryId ? "Update category" : "Save category"}
+                  {editingCategoryId ? t.updateCategory : t.saveCategory}
                 </button>
               </div>
             </form>
@@ -624,8 +808,8 @@ export default function App() {
           >
             <div className="section-heading">
               <div>
-                <p className="eyebrow">{editingQuestionId ? "Edit" : "Create"}</p>
-                <h2>{editingQuestionId ? "Edit question and answer" : "Add question and answer"}</h2>
+                <p className="eyebrow">{editingQuestionId ? t.edit : t.create}</p>
+                <h2>{editingQuestionId ? t.editQuestion : t.addQuestion}</h2>
               </div>
               <button className="icon-button" type="button" onClick={closeQuestionForm}>
                 <X size={18} aria-hidden="true" />
@@ -634,14 +818,14 @@ export default function App() {
 
             <form className="question-form" onSubmit={handleQuestionSubmit}>
               <label>
-                Category
+                {t.category}
                 <select
                   value={questionDraft.categoryId}
                   onChange={(event) =>
                     setQuestionDraft({ ...questionDraft, categoryId: event.target.value })
                   }
                 >
-                  <option value="">Select category</option>
+                  <option value="">{t.selectCategory}</option>
                   {categories.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -650,36 +834,57 @@ export default function App() {
                 </select>
               </label>
 
+              <div className="segmented-control form-language-tabs" aria-label="Question language">
+                <button
+                  className={questionFormLanguage === "en" ? "active" : ""}
+                  type="button"
+                  onClick={() => setQuestionFormLanguage("en")}
+                >
+                  {t.languageEnglish}
+                </button>
+                <button
+                  className={questionFormLanguage === "vi" ? "active" : ""}
+                  type="button"
+                  onClick={() => setQuestionFormLanguage("vi")}
+                >
+                  {t.languageVietnamese}
+                </button>
+              </div>
+
               <label>
-                Question
+                {t.question}
                 <textarea
-                  value={questionDraft.question}
+                  value={questionDraft.question[questionFormLanguage]}
                   onChange={(event) =>
-                    setQuestionDraft({ ...questionDraft, question: event.target.value })
+                    setQuestionDraft(
+                      updateLocalizedValue(questionDraft, "question", questionFormLanguage, event.target.value),
+                    )
                   }
                   rows={4}
-                  placeholder="Enter the interview question"
+                  placeholder={t.enterQuestion}
                 />
               </label>
 
               <label>
-                Answer
+                {t.answer}
                 <textarea
-                  value={questionDraft.answer}
+                  value={questionDraft.answer[questionFormLanguage]}
                   onChange={(event) =>
-                    setQuestionDraft({ ...questionDraft, answer: event.target.value })
+                    setQuestionDraft(
+                      updateLocalizedValue(questionDraft, "answer", questionFormLanguage, event.target.value),
+                    )
                   }
                   rows={8}
-                  placeholder="Enter the answer, key points, examples, trade-offs..."
+                  placeholder={t.enterAnswer}
                 />
               </label>
 
               <div className="form-actions">
                 <button className="secondary-button" type="button" onClick={closeQuestionForm}>
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button className="primary-button" type="submit">
-                  {editingQuestionId ? "Update question" : "Save question"}
+                  {editingQuestionId ? t.updateQuestion : t.saveQuestion}
                 </button>
               </div>
             </form>
@@ -699,7 +904,7 @@ export default function App() {
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Import</p>
-                <h2>Bulk import questions</h2>
+                <h2>{t.bulkImport}</h2>
               </div>
               <button className="icon-button" type="button" onClick={closeBulkImportForm}>
                 <X size={18} aria-hidden="true" />
@@ -708,12 +913,12 @@ export default function App() {
 
             <form className="question-form" onSubmit={handleBulkImportSubmit}>
               <label>
-                Category
+                {t.category}
                 <select
                   value={bulkImportCategoryId}
                   onChange={(event) => setBulkImportCategoryId(event.target.value)}
                 >
-                  <option value="">Select category</option>
+                  <option value="">{t.selectCategory}</option>
                   {categories.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -723,17 +928,17 @@ export default function App() {
               </label>
 
               <label>
-                Questions
+                {t.questions}
                 <textarea
                   value={bulkImportText}
                   onChange={(event) => setBulkImportText(event.target.value)}
                   rows={16}
                   placeholder={[
-                    "Q: Java la gi?",
-                    "A: Java la mot ngon ngu lap trinh...",
+                    "Q: What is Java?",
+                    "A: Java is a programming language...",
                     "",
-                    "Q: JVM la gi?",
-                    "A: JVM chay bytecode va quan ly runtime...",
+                    "Q: What is JVM?",
+                    "A: JVM runs bytecode and manages the runtime...",
                   ].join("\n")}
                 />
               </label>
@@ -741,16 +946,16 @@ export default function App() {
               <div className="bulk-import-meta">
                 <span>
                   {parsedBulkQuestions.length}{" "}
-                  {parsedBulkQuestions.length === 1 ? "question" : "questions"} detected
+                  {parsedBulkQuestions.length === 1 ? t.question : t.questions} {t.detected}
                 </span>
               </div>
 
               <div className="form-actions">
                 <button className="secondary-button" type="button" onClick={closeBulkImportForm}>
-                  Cancel
+                  {t.cancel}
                 </button>
                 <button className="primary-button" type="submit" disabled={!parsedBulkQuestions.length}>
-                  Import questions
+                  {t.importQuestions}
                 </button>
               </div>
             </form>
@@ -766,7 +971,7 @@ export default function App() {
             onClick={() => setSelectedCategoryId(ALL_CATEGORIES_ID)}
           >
             <Folder size={17} aria-hidden="true" />
-            <span>All categories</span>
+            <span>{t.allCategories}</span>
             <strong>{questions.length}</strong>
           </button>
 
@@ -805,13 +1010,13 @@ export default function App() {
             type="button"
             onClick={() => setShowAllCategories((value) => !value)}
           >
-            {showAllCategories ? "Show less" : "Show all"}
+            {showAllCategories ? t.showLess : t.showAll}
           </button>
         )}
 
         <button className="secondary-button" type="button" onClick={openCategoryForm}>
           <FolderPlus size={18} aria-hidden="true" />
-          New category
+          {t.newCategory}
         </button>
       </section>
 
@@ -820,7 +1025,7 @@ export default function App() {
           <div className="section-heading">
             <div>
               <p className="eyebrow">{activeCategoryName}</p>
-              <h2>Questions</h2>
+              <h2>{t.questions}</h2>
             </div>
             <span className="match-count">
               {visibleStart}-{visibleEnd} / {filteredQuestions.length}
@@ -833,6 +1038,8 @@ export default function App() {
                 {pagedQuestions.map((item) => {
                   const isSelected = selectedQuestion?.id === item.id;
                   const isFavorite = favorites.has(item.id);
+                  const questionDisplay = getLocalizedText(item.question, language);
+                  const answerDisplay = getLocalizedText(item.answer, language);
 
                   return (
                     <article
@@ -847,8 +1054,15 @@ export default function App() {
                         <span className="card-kicker">
                           {categoryById.get(item.categoryId) ?? "Uncategorized"}
                         </span>
-                        <h3>{item.question}</h3>
-                        <p>{item.answer}</p>
+                        <h3>{questionDisplay.text}</h3>
+                        <p>{answerDisplay.text}</p>
+                        {(questionDisplay.fallbackLanguage || answerDisplay.fallbackLanguage) && (
+                          <span className="fallback-chip">
+                            {questionDisplay.fallbackLanguage === "en" || answerDisplay.fallbackLanguage === "en"
+                              ? t.fallbackEnglish
+                              : t.fallbackVietnamese}
+                          </span>
+                        )}
                       </button>
 
                       <button
@@ -874,11 +1088,11 @@ export default function App() {
                     disabled={safeCurrentPage === 1}
                   >
                     <ChevronLeft size={16} aria-hidden="true" />
-                    Previous
+                    {t.previous}
                   </button>
 
                   <span>
-                    Page {safeCurrentPage} / {totalPages}
+                    {t.page} {safeCurrentPage} / {totalPages}
                   </span>
 
                   <button
@@ -887,7 +1101,7 @@ export default function App() {
                     onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                     disabled={safeCurrentPage === totalPages}
                   >
-                    Next
+                    {t.next}
                     <ChevronRight size={16} aria-hidden="true" />
                   </button>
                 </nav>
@@ -896,18 +1110,18 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <FileQuestion size={34} aria-hidden="true" />
-              <h3>{questions.length ? "No matching questions" : "No questions yet"}</h3>
+              <h3>{questions.length ? t.noMatchingQuestions : t.noQuestionsYet}</h3>
               <p>
                 {categories.length
-                  ? "Add a question to this category or try another search keyword."
-                  : "Create a category first, then add questions into it."}
+                  ? t.noQuestionsHint
+                  : t.noQuestionsStartHint}
               </p>
               <button
                 className="primary-button"
                 type="button"
                 onClick={categories.length ? openQuestionForm : openCategoryForm}
               >
-                {categories.length ? "New question" : "New category"}
+                {categories.length ? t.newQuestion : t.newCategory}
               </button>
             </div>
           )}
@@ -921,7 +1135,24 @@ export default function App() {
                   <p className="eyebrow">
                     {categoryById.get(selectedQuestion.categoryId) ?? "Uncategorized"}
                   </p>
-                  <h2>{selectedQuestion.question}</h2>
+                  <h2>{selectedQuestionDisplay?.text}</h2>
+                  {(selectedQuestionDisplay?.fallbackLanguage || selectedAnswerDisplay?.fallbackLanguage) && (
+                    <div className="fallback-panel-actions">
+                      <span className="fallback-chip panel-fallback">
+                        {selectedQuestionDisplay?.fallbackLanguage === "en" ||
+                        selectedAnswerDisplay?.fallbackLanguage === "en"
+                          ? t.fallbackEnglish
+                          : t.fallbackVietnamese}
+                      </span>
+                      <button
+                        className="secondary-button compact-action"
+                        type="button"
+                        onClick={() => openEditQuestionForm(selectedQuestion, language)}
+                      >
+                        {language === "en" ? t.addEnglishVersion : t.addVietnameseVersion}
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="answer-actions">
                   <button
@@ -960,16 +1191,16 @@ export default function App() {
               <div className="answer-block answer">
                 <div className="block-heading">
                   <CheckCircle2 size={18} aria-hidden="true" />
-                  Answer
+                  {t.answer}
                 </div>
-                <MarkdownContent value={selectedQuestion.answer} />
+                <MarkdownContent value={selectedAnswerDisplay?.text ?? ""} />
               </div>
             </>
           ) : (
             <div className="empty-state">
               <FileQuestion size={34} aria-hidden="true" />
-              <h3>Select a question</h3>
-              <p>The answer will appear here.</p>
+              <h3>{t.selectQuestion}</h3>
+              <p>{t.answerWillAppear}</p>
             </div>
           )}
         </section>

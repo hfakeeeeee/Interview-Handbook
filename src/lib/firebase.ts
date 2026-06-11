@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "../types";
 import { firebaseConfig, isFirebaseConfigured } from "./firebaseConfig";
+import { normalizeLocalizedText } from "./localization";
 import { UNCATEGORIZED_ID } from "./localQuestions";
 
 let app: FirebaseApp | undefined;
@@ -88,8 +89,8 @@ export function subscribeToQuestions(
         return {
           id: doc.id,
           categoryId: String(data.categoryId ?? UNCATEGORIZED_ID),
-          question: String(data.question ?? ""),
-          answer: String(data.answer ?? ""),
+          question: normalizeLocalizedText(data.question, "vi"),
+          answer: normalizeLocalizedText(data.answer, "vi"),
           createdAt: data.createdAt?.toDate?.().toISOString?.(),
         } as InterviewQuestion;
       });
