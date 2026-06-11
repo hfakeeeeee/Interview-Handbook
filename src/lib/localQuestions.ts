@@ -92,6 +92,17 @@ export function saveLocalQuestion(draft: QuestionDraft) {
   return question;
 }
 
+export function saveLocalQuestions(drafts: QuestionDraft[]) {
+  const created = drafts.map((draft) => ({
+    ...draft,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  }));
+  const current = loadLocalQuestions();
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify([...created, ...current]));
+  return created;
+}
+
 export function updateLocalQuestion(questionId: string, draft: QuestionDraft) {
   const current = loadLocalQuestions();
   const updated = current.map((item) =>

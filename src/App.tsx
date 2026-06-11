@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+
+​import { useEffect, useMemo, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -6,6 +7,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   Database,
   FileQuestion,
   Folder,
@@ -29,6 +31,7 @@ import {
   saveFavoriteIds,
   saveLocalCategory,
   saveLocalQuestion,
+  saveLocalQuestions,
   updateLocalCategory,
   updateLocalQuestion,
 } from "./lib/localQuestions";
@@ -56,6 +59,60 @@ function MarkdownContent({ value }: { value: string }) {
   );
 }
 
+function cleanImportedText(value: string) {
+  return value.replace(/^\s*-{3,}\s*$/gm, "").trim();
+}
+
+function parseMarkerQuestions(value: string) {
+  const questionLabel = String.raw`(?:Q(?:uestion)?|Cau hoi|Câu hỏi)`;
+  const answerLabel = String.raw`(?:A(?:nswer)?|Tra loi|Trả lời)`;
+  const chunks = value
+    .split(new RegExp(`(?=^\\s*${questionLabel}\\s*\\d*\\s*[:.-]\\s*)`, "gim"))
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+
+  return chunks.flatMap((chunk) => {
+    const match = chunk.match(
+      new RegExp(
+        `^\\s*${questionLabel}\\s*\\d*\\s*[:.-]\\s*([\\s\\S]*?)\\n\\s*${answerLabel}\\s*\\d*\\s*[:.-]\\s*([\\s\\S]*)$`,
+        "i",
+      ),
+    );
+
+    if (!match) {
+      return [];
+    }
+
+    const question = cleanImportedText(match[1]);
+    const answer = cleanImportedText(match[2]);
+    return question && answer ? [{ question, answer }] : [];
+  });
+}
+
+function parseMarkdownQuestions(value: string) {
+  const headings = [...value.matchAll(/^#{2,6}\s+(.+)$/gm)];
+
+  return headings.flatMap((heading, index) => {
+    const question = heading[1].trim();
+    const answerStart = (heading.index ?? 0) + heading[0].length;
+    const answerEnd = headings[index + 1]?.index ?? value.length;
+    const answer = cleanImportedText(value.slice(answerStart, answerEnd));
+
+    return question && answer ? [{ question, answer }] : [];
+  });
+}
+
+function parseBulkQuestions(value: string) {
+  const normalized = value.replace(/\r\n/g, "\n").trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  const markerQuestions = parseMarkerQuestions(normalized);
+  return markerQuestions.length ? markerQuestions : parseMarkdownQuestions(normalized);
+}
+
 export default function App() {
   const [categories, setCategories] = useState<Category[]>(() => loadLocalCategories());
   const [questions, setQuestions] = useState<InterviewQuestion[]>(() => loadLocalQuestions());
@@ -65,8 +122,11 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [showBulkImportForm, setShowBulkImportForm] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
+  const [bulkImportCategoryId, setBulkImportCategoryId] = useState("");
+  const [bulkImportText, setBulkImportText] = useState("");
   const [categoryDraft, setCategoryDraft] = useState<CategoryDraft>(emptyCategoryDraft);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
@@ -171,6 +231,7 @@ export default function App() {
   const visibleEnd = Math.min(pageStartIndex + QUESTIONS_PER_PAGE, filteredQuestions.length);
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
+  const parsedBulkQuestions = useMemo(() => parseBulkQuestions(bulkImportText), [bulkImportText]);
   const hasSearch = search.trim().length > 0;
   const activeCategoryName =
     selectedCategoryId === ALL_CATEGORIES_ID
@@ -270,6 +331,48 @@ export default function App() {
     setShowQuestionForm(false);
   }
 
+  async function handleBulkImportSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const categoryId =
+      bulkImportCategoryId ||
+      (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
+    const drafts = parsedBulkQuestions.map((item) => ({
+      ...item,
+      categoryId: categoryId ?? "",
+    }));
+
+    if (!categoryId) {
+      setStatus("Select a category before importing");
+      return;
+    }
+
+    if (!drafts.length) {
+      setStatus("No importable questions found");
+      return;
+    }
+
+    if (isFirebaseConfigured) {
+      const { createQuestion } = await import("./lib/firebase");
+      await Promise.all(drafts.map((draft) => createQuestion(draft)));
+      setStatus(`Imported ${drafts.length} questions to Firestore`);
+    } else {
+      const created = saveLocalQuestions(drafts);
+      setQuestions(loadLocalQuestions());
+
+      if (created[0]) {
+        setSelectedCategoryId(created[0].categoryId);
+        setSelectedId(created[0].id);
+      }
+
+      setStatus(`Imported ${drafts.length} questions locally`);
+    }
+
+    setBulkImportText("");
+    setBulkImportCategoryId("");
+    setShowBulkImportForm(false);
+  }
+
   function toggleFavorite(id: string) {
     setFavorites((current) => {
       const next = new Set(current);
@@ -364,6 +467,14 @@ export default function App() {
     setShowQuestionForm(true);
   }
 
+  function openBulkImportForm() {
+    setBulkImportCategoryId(
+      selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id ?? "" : selectedCategoryId,
+    );
+    setBulkImportText("");
+    setShowBulkImportForm(true);
+  }
+
   function openEditQuestionForm(question: InterviewQuestion) {
     setEditingQuestionId(question.id);
     setQuestionDraft({
@@ -378,6 +489,12 @@ export default function App() {
     setQuestionDraft(emptyQuestionDraft);
     setEditingQuestionId(null);
     setShowQuestionForm(false);
+  }
+
+  function closeBulkImportForm() {
+    setBulkImportCategoryId("");
+    setBulkImportText("");
+    setShowBulkImportForm(false);
   }
 
   return (
@@ -406,6 +523,10 @@ export default function App() {
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           >
             {theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
+          <button className="secondary-button" type="button" onClick={openBulkImportForm}>
+            <ClipboardList size={18} aria-hidden="true" />
+            Bulk import
           </button>
           <button className="primary-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
@@ -562,6 +683,77 @@ export default function App() {
         </div>
       )}
 
+      {showBulkImportForm && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={closeBulkImportForm}>
+          <section
+            className="modal-panel"
+            aria-label="Bulk import questions"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Import</p>
+                <h2>Bulk import questions</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={closeBulkImportForm}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <form className="question-form" onSubmit={handleBulkImportSubmit}>
+              <label>
+                Category
+                <select
+                  value={bulkImportCategoryId}
+                  onChange={(event) => setBulkImportCategoryId(event.target.value)}
+                >
+                  <option value="">Select category</option>
+                  {categories.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Questions
+                <textarea
+                  value={bulkImportText}
+                  onChange={(event) => setBulkImportText(event.target.value)}
+                  rows={16}
+                  placeholder={[
+                    "Q: Java la gi?",
+                    "A: Java la mot ngon ngu lap trinh...",
+                    "",
+                    "Q: JVM la gi?",
+                    "A: JVM chay bytecode va quan ly runtime...",
+                  ].join("\n")}
+                />
+              </label>
+
+              <div className="bulk-import-meta">
+                <span>
+                  {parsedBulkQuestions.length}{" "}
+                  {parsedBulkQuestions.length === 1 ? "question" : "questions"} detected
+                </span>
+              </div>
+
+              <div className="form-actions">
+                <button className="secondary-button" type="button" onClick={closeBulkImportForm}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit" disabled={!parsedBulkQuestions.length}>
+                  Import questions
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
       <section className="category-strip" aria-label="Categories">
         <div className="category-tabs">
           <button
@@ -624,7 +816,7 @@ export default function App() {
           {filteredQuestions.length ? (
             <>
               <div className="question-list">
-                {pagedQuestions.map((item, index) => {
+                {pagedQuestions.map((item) => {
                   const isSelected = selectedQuestion?.id === item.id;
                   const isFavorite = favorites.has(item.id);
 
@@ -639,8 +831,7 @@ export default function App() {
                         onClick={() => setSelectedId(item.id)}
                       >
                         <span className="card-kicker">
-                          {categoryById.get(item.categoryId) ?? "Uncategorized"} / Question{" "}
-                          {pageStartIndex + index + 1}
+                          {categoryById.get(item.categoryId) ?? "Uncategorized"}
                         </span>
                         <h3>{item.question}</h3>
                         <p>{item.answer}</p>
@@ -750,14 +941,6 @@ export default function App() {
                     />
                   </button>
                 </div>
-              </div>
-
-              <div className="answer-block">
-                <div className="block-heading">
-                  <FileQuestion size={18} aria-hidden="true" />
-                  Question
-                </div>
-                <p>{selectedQuestion.question}</p>
               </div>
 
               <div className="answer-block answer">
