@@ -12,6 +12,7 @@ import {
   FileQuestion,
   Folder,
   FolderPlus,
+  Info,
   Moon,
   Pencil,
   Plus,
@@ -117,6 +118,13 @@ const translations: Record<Language, Record<string, string>> = {
     fallbackVietnamese: "Vietnamese fallback",
     favorites: "Favorites",
     importQuestions: "Import questions",
+    infoBulkTip: "Bulk import supports new questions, updates by ID, and bilingual EN/VI blocks.",
+    infoCategoryTip: "Use categories to group topics like Java Core, Collections, or System Design.",
+    infoDescription:
+      "A focused workspace for collecting interview questions, storing Markdown answers, and reviewing them by category.",
+    infoExportTip: "Export prompt helps translate selected questions with AI and paste them back safely.",
+    infoGuide: "Guide",
+    infoLanguageTip: "Switch EN/VI to review the same question in either language.",
     languageEnglish: "English",
     languageVietnamese: "Vietnamese",
     missingEnglish: "Missing English",
@@ -174,6 +182,13 @@ const translations: Record<Language, Record<string, string>> = {
     fallbackVietnamese: "Đang hiển thị bản tiếng Việt",
     favorites: "Yêu thích",
     importQuestions: "Nhập câu hỏi",
+    infoBulkTip: "Nhập hàng loạt hỗ trợ tạo câu hỏi mới, cập nhật theo ID và nhập song ngữ EN/VI.",
+    infoCategoryTip: "Dùng danh mục để nhóm chủ đề như Java Core, Collections hoặc System Design.",
+    infoDescription:
+      "Không gian ôn luyện tập trung để lưu câu hỏi phỏng vấn, ghi câu trả lời bằng Markdown và xem lại theo danh mục.",
+    infoExportTip: "Xuất prompt giúp dịch các câu đã chọn bằng AI và nhập ngược lại an toàn.",
+    infoGuide: "Hướng dẫn",
+    infoLanguageTip: "Chuyển EN/VI để xem cùng một câu hỏi ở từng ngôn ngữ.",
     languageEnglish: "Tiếng Anh",
     languageVietnamese: "Tiếng Việt",
     missingEnglish: "Thiếu tiếng Anh",
@@ -446,6 +461,7 @@ export default function App() {
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
   const [showExportForm, setShowExportForm] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(false);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(emptyQuestionDraft);
   const [questionFormLanguage, setQuestionFormLanguage] = useState<Language>("vi");
@@ -934,10 +950,19 @@ export default function App() {
         </div>
 
         <div className="header-actions">
-          <span className={isFirebaseConfigured ? "status online" : "status"}>
+          <span className={isFirebaseConfigured ? "status online" : "status"} title={status}>
             <Database size={16} aria-hidden="true" />
-            {status}
+            {isFirebaseConfigured ? "Firestore" : status}
           </span>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setShowInfoPanel(true)}
+            title="About Interview Handbook"
+            aria-label="About Interview Handbook"
+          >
+            <Info size={18} aria-hidden="true" />
+          </button>
           <button
             className="icon-button"
             type="button"
@@ -963,20 +988,62 @@ export default function App() {
               VI
             </button>
           </div>
-          <button className="secondary-button" type="button" onClick={openBulkImportForm}>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={openBulkImportForm}
+            title={t.bulkImport}
+            aria-label={t.bulkImport}
+          >
             <ClipboardList size={18} aria-hidden="true" />
-            {t.bulkImport}
           </button>
-          <button className="secondary-button" type="button" onClick={openExportForm}>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={openExportForm}
+            title={t.exportPrompt}
+            aria-label={t.exportPrompt}
+          >
             <Copy size={18} aria-hidden="true" />
-            {t.exportPrompt}
           </button>
-          <button className="primary-button" type="button" onClick={openQuestionForm}>
+          <button className="primary-button new-question-button" type="button" onClick={openQuestionForm}>
             <Plus size={18} aria-hidden="true" />
-            {t.newQuestion}
+            <span>{t.newQuestion}</span>
           </button>
         </div>
       </header>
+
+      {showInfoPanel && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowInfoPanel(false)}>
+          <section
+            className="modal-panel compact-modal"
+            aria-label="About Interview Handbook"
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">{t.infoGuide}</p>
+                <h2>Interview Handbook</h2>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setShowInfoPanel(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="info-panel">
+              <p>{t.infoDescription}</p>
+              <ul>
+                <li>{t.infoCategoryTip}</li>
+                <li>{t.infoLanguageTip}</li>
+                <li>{t.infoBulkTip}</li>
+                <li>{t.infoExportTip}</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="summary-grid" aria-label="Question summary">
         <div className="summary-item">
@@ -1324,6 +1391,35 @@ export default function App() {
       )}
 
       <section className="category-strip" aria-label="Categories">
+        <div className="category-strip__header">
+          <div>
+            <p className="eyebrow">Browse</p>
+            <h2>{t.categories}</h2>
+          </div>
+
+          <div className="category-strip__actions">
+            {categories.length > 4 && (
+              <button
+                className="secondary-button compact-button"
+                type="button"
+                onClick={() => setShowAllCategories((value) => !value)}
+              >
+                {showAllCategories ? t.showLess : t.showAll}
+              </button>
+            )}
+
+            <button
+              className="icon-button"
+              type="button"
+              onClick={openCategoryForm}
+              title={t.newCategory}
+              aria-label={t.newCategory}
+            >
+              <FolderPlus size={18} aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
         <div className={showAllCategories ? "category-tabs expanded" : "category-tabs"}>
           <button
             className={selectedCategoryId === ALL_CATEGORIES_ID ? "category-chip active" : "category-chip"}
@@ -1363,21 +1459,6 @@ export default function App() {
             </div>
           ))}
         </div>
-
-        {categories.length > 4 && (
-          <button
-            className="secondary-button"
-            type="button"
-            onClick={() => setShowAllCategories((value) => !value)}
-          >
-            {showAllCategories ? t.showLess : t.showAll}
-          </button>
-        )}
-
-        <button className="secondary-button" type="button" onClick={openCategoryForm}>
-          <FolderPlus size={18} aria-hidden="true" />
-          {t.newCategory}
-        </button>
       </section>
 
       <section className="practice-layout">
