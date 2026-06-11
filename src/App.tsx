@@ -39,6 +39,7 @@ import {
   emptyLocalizedText,
   getLocalizedText,
   hasLocalizedPair,
+  languages,
   languageLabels,
   localizedSearchText,
   normalizeLocalizedText,
@@ -63,25 +64,14 @@ const emptyCategoryDraft: CategoryDraft = {
 type ExportScope = "all" | "category" | "page" | "selected";
 type ImportedQuestion = {
   id?: string;
-  question: string;
-  answer: string;
+  question?: string;
+  answer?: string;
+  localizedQuestion?: Partial<Record<Language, string>>;
+  localizedAnswer?: Partial<Record<Language, string>>;
 };
 
 function sortCategories(categories: Category[]) {
   return [...categories].sort((first, second) => first.name.localeCompare(second.name));
-}
-
-function createLocalizedDraft(question: string, answer: string, language: Language) {
-  return {
-    answer: {
-      ...emptyLocalizedText(),
-      [language]: answer,
-    },
-    question: {
-      ...emptyLocalizedText(),
-      [language]: question,
-    },
-  };
 }
 
 function updateLocalizedValue(
@@ -224,35 +214,111 @@ function cleanImportedText(value: string) {
   return value.replace(/^\s*-{3,}\s*$/gm, "").trim();
 }
 
-function parseMarkerQuestions(value: string) {
+function stripCodeBlockWrapper(value: string) {
+  return value.replace(/^```(?:text|markdown)?\s*/i, "").replace(/```\s*$/i, "").trim();
+}
+
+function parseImportLanguage(value: string | undefined): Language | null {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "en" || normalized === "english") {
+    return "en";
+  }
+
+  if (normalized === "vi" || normalized === "vietnamese") {
+    return "vi";
+  }
+
+  return null;
+}
+
+function parseMarkerChunk(value: string): ImportedQuestion | null {
   const questionLabel = String.raw`(?:Q(?:uestion)?|Cau hoi|Câu hỏi)`;
   const answerLabel = String.raw`(?:A(?:nswer)?|Tra loi|Trả lời)`;
-  const hasImportIds = /^\s*ID\s*:\s*[^\n]+/im.test(value);
-  const splitPattern = hasImportIds
-    ? `(?=^\\s*ID\\s*:\\s*[^\\n]+\\n\\s*${questionLabel}\\s*\\d*\\s*:\\s*)`
-    : `(?=^\\s*${questionLabel}\\s*\\d*\\s*:\\s*)`;
-  const chunks = value
-    .split(new RegExp(splitPattern, "gim"))
+  const labelPattern = new RegExp(
+    `^\\s*(?:(EN|English|VI|Vietnamese)\\s+)?(${questionLabel}|${answerLabel})\\s*\\d*\\s*:\\s*`,
+    "gim",
+  );
+  const chunk = stripCodeBlockWrapper(value);
+  const id = chunk.match(/^\s*ID\s*:\s*([^\n]+)/i)?.[1]?.trim();
+  const labels = [...chunk.matchAll(labelPattern)];
+
+  if (labels.length < 2) {
+    return null;
+  }
+
+  const imported: ImportedQuestion = {
+    id,
+    localizedAnswer: {},
+    localizedQuestion: {},
+  };
+
+  labels.forEach((label, index) => {
+    const contentStart = (label.index ?? 0) + label[0].length;
+    const contentEnd = labels[index + 1]?.index ?? chunk.length;
+    const content = cleanImportedText(chunk.slice(contentStart, contentEnd));
+    const labelLanguage = parseImportLanguage(label[1]);
+    const labelKind = label[2].toLowerCase().startsWith("a") || label[2].toLowerCase().startsWith("tra") ? "answer" : "question";
+
+    if (!content) {
+      return;
+    }
+
+    if (labelLanguage) {
+      if (labelKind === "answer") {
+        imported.localizedAnswer = {
+          ...imported.localizedAnswer,
+          [labelLanguage]: content,
+        };
+      } else {
+        imported.localizedQuestion = {
+          ...imported.localizedQuestion,
+          [labelLanguage]: content,
+        };
+      }
+      return;
+    }
+
+    if (labelKind === "answer") {
+      imported.answer = content;
+    } else {
+      imported.question = content;
+    }
+  });
+
+  const hasPlainPair = Boolean(imported.question && imported.answer);
+  const hasLocalizedImportPair = languages.some(
+    (item) => imported.localizedQuestion?.[item]?.trim() && imported.localizedAnswer?.[item]?.trim(),
+  );
+
+  return hasPlainPair || hasLocalizedImportPair ? imported : null;
+}
+
+function splitMarkerChunks(value: string) {
+  const separatorChunks = value
+    .split(/^\s*-{3,}\s*$/gm)
     .map((chunk) => chunk.trim())
     .filter(Boolean);
 
-  return chunks.flatMap((chunk) => {
-    const match = chunk.match(
-      new RegExp(
-        `^\\s*(?:ID\\s*:\\s*([^\\n]+)\\n\\s*)?${questionLabel}\\s*\\d*\\s*:\\s*([\\s\\S]*?)\\n\\s*${answerLabel}\\s*\\d*\\s*:\\s*([\\s\\S]*)$`,
-        "i",
-      ),
-    );
+  if (separatorChunks.length > 1) {
+    return separatorChunks;
+  }
 
-    if (!match) {
-      return [];
-    }
+  const questionLabel = String.raw`(?:Q(?:uestion)?|Cau hoi|Câu hỏi)`;
+  const languagePrefix = String.raw`(?:(?:EN|English|VI|Vietnamese)\s+)?`;
+  const hasImportIds = /^\s*ID\s*:\s*[^\n]+/im.test(value);
+  const splitPattern = hasImportIds
+    ? `(?=^\\s*ID\\s*:\\s*[^\\n]+\\n\\s*${languagePrefix}${questionLabel}\\s*\\d*\\s*:\\s*)`
+    : `(?=^\\s*${questionLabel}\\s*\\d*\\s*:\\s*)`;
 
-    const id = match[1]?.trim();
-    const question = cleanImportedText(match[2]);
-    const answer = cleanImportedText(match[3]);
-    return question && answer ? [{ id, question, answer }] : [];
-  });
+  return value
+    .split(new RegExp(splitPattern, "gim"))
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+}
+
+function parseMarkerQuestions(value: string) {
+  return splitMarkerChunks(value).flatMap((chunk) => parseMarkerChunk(chunk) ?? []);
 }
 
 function parseMarkdownQuestions(value: string): ImportedQuestion[] {
@@ -277,6 +343,39 @@ function parseBulkQuestions(value: string) {
 
   const markerQuestions = parseMarkerQuestions(normalized);
   return markerQuestions.length ? markerQuestions : parseMarkdownQuestions(normalized);
+}
+
+function getImportedLanguages(item: ImportedQuestion) {
+  return languages.filter(
+    (language) => item.localizedQuestion?.[language]?.trim() && item.localizedAnswer?.[language]?.trim(),
+  );
+}
+
+function createDraftFromImport(
+  item: ImportedQuestion,
+  categoryId: string,
+  fallbackLanguage: Language,
+  current?: InterviewQuestion,
+): QuestionDraft {
+  const question = current ? { ...current.question } : emptyLocalizedText();
+  const answer = current ? { ...current.answer } : emptyLocalizedText();
+  const importedLanguages = getImportedLanguages(item);
+
+  if (importedLanguages.length) {
+    importedLanguages.forEach((language) => {
+      question[language] = item.localizedQuestion?.[language]?.trim() ?? "";
+      answer[language] = item.localizedAnswer?.[language]?.trim() ?? "";
+    });
+  } else {
+    question[fallbackLanguage] = item.question?.trim() ?? "";
+    answer[fallbackLanguage] = item.answer?.trim() ?? "";
+  }
+
+  return {
+    categoryId,
+    question,
+    answer,
+  };
 }
 
 function formatQuestionForPrompt(question: InterviewQuestion, language: Language, index: number) {
@@ -481,17 +580,7 @@ export default function App() {
       return [
         {
           id: current.id,
-          draft: {
-            categoryId: current.categoryId,
-            question: {
-              ...current.question,
-              [bulkImportLanguage]: item.question,
-            },
-            answer: {
-              ...current.answer,
-              [bulkImportLanguage]: item.answer,
-            },
-          },
+          draft: createDraftFromImport(item, current.categoryId, bulkImportLanguage, current),
         },
       ];
     });
@@ -640,10 +729,9 @@ export default function App() {
     const categoryId =
       bulkImportCategoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
-    const drafts: QuestionDraft[] = bulkImportPlan.newQuestions.map((item) => ({
-      ...createLocalizedDraft(item.question, item.answer, bulkImportLanguage),
-      categoryId: categoryId ?? "",
-    }));
+    const drafts: QuestionDraft[] = bulkImportPlan.newQuestions.map((item) =>
+      createDraftFromImport(item, categoryId ?? "", bulkImportLanguage),
+    );
 
     if (!parsedBulkQuestions.length) {
       setStatus("No importable questions found");
@@ -1109,14 +1197,17 @@ export default function App() {
                   rows={16}
                   placeholder={[
                     "ID: optional-existing-question-id",
-                    "Q: Translated or updated question",
-                    "A: Translated or updated answer...",
+                    "EN Q: What is Java?",
+                    "EN A: Java is a programming language...",
+                    "VI Q: Java là gì?",
+                    "VI A: Java là một ngôn ngữ lập trình...",
                     "",
-                    "Q: What is Java?",
-                    "A: Java is a programming language...",
+                    "---",
                     "",
-                    "Q: What is JVM?",
-                    "A: JVM runs bytecode and manages the runtime...",
+                    "EN Q: What is JVM?",
+                    "EN A: JVM runs bytecode and manages the runtime...",
+                    "VI Q: JVM là gì?",
+                    "VI A: JVM chạy bytecode và quản lý runtime...",
                   ].join("\n")}
                 />
               </label>

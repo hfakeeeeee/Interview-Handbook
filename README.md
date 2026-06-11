@@ -17,6 +17,8 @@ with Firebase Firestore as the database.
 - Bulk Import lets you choose which language the pasted questions should fill.
 - Bulk Import updates existing questions when an imported block includes `ID:`,
   and creates new questions when the block has no `ID:`.
+- Bulk Import can fill both languages in one pass with `EN Q:`, `EN A:`,
+  `VI Q:`, and `VI A:` blocks separated by `---`.
 - Edit a question's category, question text, and answer text.
 - Delete questions with confirmation.
 - Mark questions as favorites in localStorage.
