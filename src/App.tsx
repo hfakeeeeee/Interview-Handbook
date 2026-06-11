@@ -50,6 +50,10 @@ const emptyCategoryDraft: CategoryDraft = {
   name: "",
 };
 
+function sortCategories(categories: Category[]) {
+  return [...categories].sort((first, second) => first.name.localeCompare(second.name));
+}
+
 function MarkdownContent({ value }: { value: string }) {
   return (
     <div className="markdown-content">
@@ -113,11 +117,12 @@ function parseBulkQuestions(value: string) {
 }
 
 export default function App() {
-  const [categories, setCategories] = useState<Category[]>(() => loadLocalCategories());
+  const [categories, setCategories] = useState<Category[]>(() => sortCategories(loadLocalCategories()));
   const [questions, setQuestions] = useState<InterviewQuestion[]>(() => loadLocalQuestions());
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteIds());
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
+  const [showAllCategories, setShowAllCategories] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
@@ -153,12 +158,12 @@ export default function App() {
     void import("./lib/firebase").then(({ subscribeToCategories, subscribeToQuestions }) => {
       unsubscribeCategories = subscribeToCategories(
         (items) => {
-          setCategories(items);
+          setCategories(sortCategories(items));
           setStatus("Firestore connected");
         },
         (error) => {
           setStatus(error.message);
-          setCategories(loadLocalCategories());
+          setCategories(sortCategories(loadLocalCategories()));
         },
       );
 
@@ -273,7 +278,7 @@ export default function App() {
       const created = editingCategoryId
         ? updateLocalCategory(editingCategoryId, nextDraft)
         : saveLocalCategory(nextDraft);
-      setCategories(loadLocalCategories());
+      setCategories(sortCategories(loadLocalCategories()));
       if (created) {
         setSelectedCategoryId(created.id);
       }
@@ -448,7 +453,7 @@ export default function App() {
       setStatus("Deleted category from Firestore");
     } else {
       deleteLocalCategory(category.id);
-      setCategories(loadLocalCategories());
+      setCategories(sortCategories(loadLocalCategories()));
       setStatus("Deleted category locally");
     }
 
@@ -754,7 +759,7 @@ export default function App() {
       )}
 
       <section className="category-strip" aria-label="Categories">
-        <div className="category-tabs">
+        <div className={showAllCategories ? "category-tabs expanded" : "category-tabs"}>
           <button
             className={selectedCategoryId === ALL_CATEGORIES_ID ? "category-chip active" : "category-chip"}
             type="button"
@@ -793,6 +798,16 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {categories.length > 4 && (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setShowAllCategories((value) => !value)}
+          >
+            {showAllCategories ? "Show less" : "Show all"}
+          </button>
+        )}
 
         <button className="secondary-button" type="button" onClick={openCategoryForm}>
           <FolderPlus size={18} aria-hidden="true" />
