@@ -119,6 +119,8 @@ const translations: Record<Language, Record<string, string>> = {
     importQuestions: "Import questions",
     languageEnglish: "English",
     languageVietnamese: "Vietnamese",
+    missingEnglish: "Missing English",
+    missingVietnamese: "Missing Vietnamese",
     newCategory: "New category",
     newQuestion: "New question",
     noMatchingQuestions: "No matching questions",
@@ -174,6 +176,8 @@ const translations: Record<Language, Record<string, string>> = {
     importQuestions: "Nhập câu hỏi",
     languageEnglish: "Tiếng Anh",
     languageVietnamese: "Tiếng Việt",
+    missingEnglish: "Thiếu tiếng Anh",
+    missingVietnamese: "Thiếu tiếng Việt",
     newCategory: "Danh mục mới",
     newQuestion: "Câu hỏi mới",
     noMatchingQuestions: "Không có câu hỏi phù hợp",
@@ -563,6 +567,8 @@ export default function App() {
   const visibleEnd = Math.min(pageStartIndex + QUESTIONS_PER_PAGE, filteredQuestions.length);
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
+  const missingEnglishQuestions = questions.filter((item) => !item.question.en.trim() || !item.answer.en.trim()).length;
+  const missingVietnameseQuestions = questions.filter((item) => !item.question.vi.trim() || !item.answer.vi.trim()).length;
   const parsedBulkQuestions = useMemo(() => parseBulkQuestions(bulkImportText), [bulkImportText]);
   const bulkImportPlan = useMemo(() => {
     const questionById = new Map(questions.map((item) => [item.id, item]));
@@ -984,6 +990,14 @@ export default function App() {
         <div className="summary-item">
           <span>{favoriteQuestions}</span>
           <p>{t.favorites}</p>
+        </div>
+        <div className="summary-item">
+          <span>{missingEnglishQuestions}</span>
+          <p>{t.missingEnglish}</p>
+        </div>
+        <div className="summary-item">
+          <span>{missingVietnameseQuestions}</span>
+          <p>{t.missingVietnamese}</p>
         </div>
       </section>
 
