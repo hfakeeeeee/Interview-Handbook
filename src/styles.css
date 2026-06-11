@@ -468,9 +468,44 @@ textarea:focus,
 
 .bulk-import-meta {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
   color: var(--text-muted);
   font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.import-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  padding: 5px 9px;
+  color: var(--text-secondary);
+}
+
+.import-pill.create {
+  border-color: rgba(37, 99, 235, 0.28);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent);
+}
+
+.import-pill.update {
+  border-color: rgba(22, 163, 74, 0.3);
+  background: rgba(22, 163, 74, 0.11);
+  color: #15803d;
+}
+
+.import-pill.danger {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: rgba(220, 38, 38, 0.1);
+  color: #dc2626;
+}
+
+.form-warning {
+  margin: -4px 0 2px;
+  color: #dc2626;
+  font-size: 0.86rem;
   font-weight: 800;
 }
 

@@ -465,6 +465,44 @@ export default function App() {
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
   const parsedBulkQuestions = useMemo(() => parseBulkQuestions(bulkImportText), [bulkImportText]);
+  const bulkImportPlan = useMemo(() => {
+    const questionById = new Map(questions.map((item) => [item.id, item]));
+    const missingIds = parsedBulkQuestions
+      .filter((item) => item.id && !questionById.has(item.id))
+      .map((item) => item.id);
+    const newQuestions = parsedBulkQuestions.filter((item) => !item.id);
+    const updates = parsedBulkQuestions.flatMap((item) => {
+      const current = item.id ? questionById.get(item.id) : undefined;
+
+      if (!current) {
+        return [];
+      }
+
+      return [
+        {
+          id: current.id,
+          draft: {
+            categoryId: current.categoryId,
+            question: {
+              ...current.question,
+              [bulkImportLanguage]: item.question,
+            },
+            answer: {
+              ...current.answer,
+              [bulkImportLanguage]: item.answer,
+            },
+          },
+        },
+      ];
+    });
+
+    return {
+      missingIds,
+      newQuestions,
+      updates,
+    };
+  }, [bulkImportLanguage, parsedBulkQuestions, questions]);
+  const hasBulkImportErrors = bulkImportPlan.missingIds.length > 0;
   const hasSearch = search.trim().length > 0;
   const activeCategoryName =
     selectedCategoryId === ALL_CATEGORIES_ID
@@ -602,36 +640,7 @@ export default function App() {
     const categoryId =
       bulkImportCategoryId ||
       (selectedCategoryId === ALL_CATEGORIES_ID ? categories[0]?.id : selectedCategoryId);
-    const questionById = new Map(questions.map((item) => [item.id, item]));
-    const missingIds = parsedBulkQuestions
-      .filter((item) => item.id && !questionById.has(item.id))
-      .map((item) => item.id);
-    const newQuestions = parsedBulkQuestions.filter((item) => !item.id);
-    const updates = parsedBulkQuestions.flatMap((item) => {
-      const current = item.id ? questionById.get(item.id) : undefined;
-
-      if (!current) {
-        return [];
-      }
-
-      return [
-        {
-          id: current.id,
-          draft: {
-            categoryId: current.categoryId,
-            question: {
-              ...current.question,
-              [bulkImportLanguage]: item.question,
-            },
-            answer: {
-              ...current.answer,
-              [bulkImportLanguage]: item.answer,
-            },
-          },
-        },
-      ];
-    });
-    const drafts: QuestionDraft[] = newQuestions.map((item) => ({
+    const drafts: QuestionDraft[] = bulkImportPlan.newQuestions.map((item) => ({
       ...createLocalizedDraft(item.question, item.answer, bulkImportLanguage),
       categoryId: categoryId ?? "",
     }));
@@ -641,12 +650,12 @@ export default function App() {
       return;
     }
 
-    if (missingIds.length) {
-      setStatus(`Could not find ${missingIds.length} question IDs from the import`);
+    if (bulkImportPlan.missingIds.length) {
+      setStatus(`Could not find ${bulkImportPlan.missingIds.length} question IDs from the import`);
       return;
     }
 
-    if (newQuestions.length && !categoryId) {
+    if (bulkImportPlan.newQuestions.length && !categoryId) {
       setStatus("Select a category before importing");
       return;
     }
@@ -655,22 +664,22 @@ export default function App() {
       const { createQuestion, updateQuestion } = await import("./lib/firebase");
       await Promise.all([
         ...drafts.map((draft) => createQuestion(draft)),
-        ...updates.map((item) => updateQuestion(item.id, item.draft)),
+        ...bulkImportPlan.updates.map((item) => updateQuestion(item.id, item.draft)),
       ]);
-      setStatus(`Imported ${drafts.length} new and updated ${updates.length} in Firestore`);
+      setStatus(`Imported ${drafts.length} new and updated ${bulkImportPlan.updates.length} in Firestore`);
     } else {
       const created = saveLocalQuestions(drafts);
-      updates.forEach((item) => updateLocalQuestion(item.id, item.draft));
+      bulkImportPlan.updates.forEach((item) => updateLocalQuestion(item.id, item.draft));
       setQuestions(loadLocalQuestions());
 
       if (created[0]) {
         setSelectedCategoryId(created[0].categoryId);
         setSelectedId(created[0].id);
-      } else if (updates[0]) {
-        setSelectedId(updates[0].id);
+      } else if (bulkImportPlan.updates[0]) {
+        setSelectedId(bulkImportPlan.updates[0].id);
       }
 
-      setStatus(`Imported ${drafts.length} new and updated ${updates.length} locally`);
+      setStatus(`Imported ${drafts.length} new and updated ${bulkImportPlan.updates.length} locally`);
     }
 
     setBulkImportText("");
@@ -1113,17 +1122,28 @@ export default function App() {
               </label>
 
               <div className="bulk-import-meta">
-                <span>
+                <span className="import-pill">
                   {parsedBulkQuestions.length}{" "}
                   {parsedBulkQuestions.length === 1 ? t.question : t.questions} {t.detected}
                 </span>
+                <span className="import-pill create">{bulkImportPlan.newQuestions.length} create</span>
+                <span className="import-pill update">{bulkImportPlan.updates.length} update</span>
+                <span className={hasBulkImportErrors ? "import-pill danger" : "import-pill"}>
+                  {bulkImportPlan.missingIds.length} missing ID
+                </span>
               </div>
+
+              {hasBulkImportErrors && (
+                <p className="form-warning">
+                  {bulkImportPlan.missingIds.length} imported IDs do not match existing questions.
+                </p>
+              )}
 
               <div className="form-actions">
                 <button className="secondary-button" type="button" onClick={closeBulkImportForm}>
                   {t.cancel}
                 </button>
-                <button className="primary-button" type="submit" disabled={!parsedBulkQuestions.length}>
+                <button className="primary-button" type="submit" disabled={!parsedBulkQuestions.length || hasBulkImportErrors}>
                   {t.importQuestions}
                 </button>
               </div>
