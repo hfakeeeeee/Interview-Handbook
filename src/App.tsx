@@ -66,6 +66,13 @@ const emptyCategoryDraft: CategoryDraft = {
 
 type ExportScope = "all" | "category" | "page" | "selected";
 type QuestionSortOrder = "newest" | "oldest";
+type ConfirmDialog = {
+  confirmLabel: string;
+  detail?: string;
+  message: string;
+  onConfirm: () => Promise<void> | void;
+  title: string;
+};
 type ImportedQuestion = {
   id?: string;
   question?: string;
@@ -126,8 +133,10 @@ const translations: Record<Language, Record<string, string>> = {
     categoryRequired: "Category name is required",
     clearSelection: "Clear",
     create: "Create",
+    deleteCategory: "Delete category",
     deleteCategoryConfirm: "Delete this category?",
     deleteCategoryWithQuestionsConfirm: "Delete this category and all questions inside it?",
+    deleteQuestion: "Delete question",
     deleteQuestionConfirm: "Delete this question? This action cannot be undone.",
     deleteSelected: "Delete selected",
     deleteSelectedConfirm: "Delete selected questions? This action cannot be undone.",
@@ -197,8 +206,10 @@ const translations: Record<Language, Record<string, string>> = {
     categoryRequired: "Tên danh mục là bắt buộc",
     clearSelection: "Bỏ chọn",
     create: "Tạo mới",
+    deleteCategory: "Xóa danh mục",
     deleteCategoryConfirm: "Xóa danh mục này?",
     deleteCategoryWithQuestionsConfirm: "Xóa danh mục này và toàn bộ câu hỏi bên trong?",
+    deleteQuestion: "Xóa câu hỏi",
     deleteQuestionConfirm: "Xóa câu hỏi này? Hành động này không thể hoàn tác.",
     deleteSelected: "Xóa đã chọn",
     deleteSelectedConfirm: "Xóa các câu hỏi đã chọn? Hành động này không thể hoàn tác.",
@@ -495,6 +506,7 @@ export default function App() {
   const [pageInput, setPageInput] = useState("1");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(() => new Set());
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
   const [showExportForm, setShowExportForm] = useState(false);
@@ -914,60 +926,66 @@ export default function App() {
       return;
     }
 
-    const confirmed = window.confirm(`${t.deleteSelectedConfirm}\n\n${questionIds.length} ${t.questions}`);
+    setConfirmDialog({
+      confirmLabel: t.deleteSelected,
+      detail: `${questionIds.length} ${t.questions}`,
+      message: t.deleteSelectedConfirm,
+      title: t.deleteSelected,
+      onConfirm: async () => {
+        if (isFirebaseConfigured) {
+          const { deleteQuestions } = await import("./lib/firebase");
+          await deleteQuestions(questionIds);
+          setStatus(`Deleted ${questionIds.length} questions from Firestore`);
+        } else {
+          deleteLocalQuestions(questionIds);
+          setQuestions(loadLocalQuestions());
+          setStatus(`Deleted ${questionIds.length} questions locally`);
+        }
 
-    if (!confirmed) {
-      return;
-    }
-
-    if (isFirebaseConfigured) {
-      const { deleteQuestions } = await import("./lib/firebase");
-      await deleteQuestions(questionIds);
-      setStatus(`Deleted ${questionIds.length} questions from Firestore`);
-    } else {
-      deleteLocalQuestions(questionIds);
-      setQuestions(loadLocalQuestions());
-      setStatus(`Deleted ${questionIds.length} questions locally`);
-    }
-
-    setFavorites((current) => {
-      const next = new Set(current);
-      questionIds.forEach((questionId) => next.delete(questionId));
-      return next;
+        setFavorites((current) => {
+          const next = new Set(current);
+          questionIds.forEach((questionId) => next.delete(questionId));
+          return next;
+        });
+        setSelectedQuestionIds(new Set());
+        setSelectedId(null);
+      },
     });
-    setSelectedQuestionIds(new Set());
-    setSelectedId(null);
   }
 
   async function handleDeleteQuestion(question: InterviewQuestion) {
-    const confirmed = window.confirm(t.deleteQuestionConfirm);
+    const questionTitle = getLocalizedText(question.question, language).text;
 
-    if (!confirmed) {
-      return;
-    }
+    setConfirmDialog({
+      confirmLabel: t.deleteQuestion,
+      detail: questionTitle,
+      message: t.deleteQuestionConfirm,
+      title: t.deleteQuestion,
+      onConfirm: async () => {
+        if (isFirebaseConfigured) {
+          const { deleteQuestion } = await import("./lib/firebase");
+          await deleteQuestion(question.id);
+          setStatus("Deleted question from Firestore");
+        } else {
+          deleteLocalQuestion(question.id);
+          setQuestions(loadLocalQuestions());
+          setStatus("Deleted question locally");
+        }
 
-    if (isFirebaseConfigured) {
-      const { deleteQuestion } = await import("./lib/firebase");
-      await deleteQuestion(question.id);
-      setStatus("Deleted question from Firestore");
-    } else {
-      deleteLocalQuestion(question.id);
-      setQuestions(loadLocalQuestions());
-      setStatus("Deleted question locally");
-    }
+        setFavorites((current) => {
+          const next = new Set(current);
+          next.delete(question.id);
+          return next;
+        });
+        setSelectedQuestionIds((current) => {
+          const next = new Set(current);
+          next.delete(question.id);
+          return next;
+        });
 
-    setFavorites((current) => {
-      const next = new Set(current);
-      next.delete(question.id);
-      return next;
+        setSelectedId(null);
+      },
     });
-    setSelectedQuestionIds((current) => {
-      const next = new Set(current);
-      next.delete(question.id);
-      return next;
-    });
-
-    setSelectedId(null);
   }
 
   function openCategoryForm() {
@@ -992,43 +1010,42 @@ export default function App() {
     const categoryQuestionIds = questions.filter((question) => question.categoryId === category.id).map((question) => question.id);
     const questionCount = categoryQuestionIds.length;
 
-    const confirmMessage = questionCount
-      ? `${t.deleteCategoryWithQuestionsConfirm}\n\n${category.name}: ${questionCount} ${t.questions}`
-      : `${t.deleteCategoryConfirm}\n\n${category.name}`;
-    const confirmed = window.confirm(confirmMessage);
+    setConfirmDialog({
+      confirmLabel: t.deleteCategory,
+      detail: questionCount ? `${category.name}: ${questionCount} ${t.questions}` : category.name,
+      message: questionCount ? t.deleteCategoryWithQuestionsConfirm : t.deleteCategoryConfirm,
+      title: t.deleteCategory,
+      onConfirm: async () => {
+        if (isFirebaseConfigured) {
+          const { deleteCategory, deleteQuestions } = await import("./lib/firebase");
+          await deleteQuestions(categoryQuestionIds);
+          await deleteCategory(category.id);
+          setStatus(`Deleted category and ${questionCount} questions from Firestore`);
+        } else {
+          deleteLocalQuestions(categoryQuestionIds);
+          deleteLocalCategory(category.id);
+          setCategories(sortCategories(loadLocalCategories()));
+          setQuestions(loadLocalQuestions());
+          setStatus("Deleted category locally");
+        }
 
-    if (!confirmed) {
-      return;
-    }
+        if (selectedCategoryId === category.id) {
+          setSelectedCategoryId(ALL_CATEGORIES_ID);
+        }
 
-    if (isFirebaseConfigured) {
-      const { deleteCategory, deleteQuestions } = await import("./lib/firebase");
-      await deleteQuestions(categoryQuestionIds);
-      await deleteCategory(category.id);
-      setStatus(`Deleted category and ${questionCount} questions from Firestore`);
-    } else {
-      deleteLocalQuestions(categoryQuestionIds);
-      deleteLocalCategory(category.id);
-      setCategories(sortCategories(loadLocalCategories()));
-      setQuestions(loadLocalQuestions());
-      setStatus("Deleted category locally");
-    }
-
-    if (selectedCategoryId === category.id) {
-      setSelectedCategoryId(ALL_CATEGORIES_ID);
-    }
-
-    setFavorites((current) => {
-      const next = new Set(current);
-      categoryQuestionIds.forEach((questionId) => next.delete(questionId));
-      return next;
+        setFavorites((current) => {
+          const next = new Set(current);
+          categoryQuestionIds.forEach((questionId) => next.delete(questionId));
+          return next;
+        });
+        setSelectedQuestionIds((current) => {
+          const next = new Set(current);
+          categoryQuestionIds.forEach((questionId) => next.delete(questionId));
+          return next;
+        });
+        setSelectedId(null);
+      },
     });
-    setSelectedQuestionIds((current) => {
-      const next = new Set(current);
-      categoryQuestionIds.forEach((questionId) => next.delete(questionId));
-      return next;
-    });
-    setSelectedId(null);
   }
 
   function openQuestionForm() {
@@ -1189,6 +1206,45 @@ export default function App() {
                 <li>{t.infoBulkTip}</li>
                 <li>{t.infoExportTip}</li>
               </ul>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setConfirmDialog(null)}>
+          <section
+            className="modal-panel confirm-modal"
+            aria-label={confirmDialog.title}
+            aria-modal="true"
+            role="dialog"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="confirm-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <div className="confirm-content">
+              <p className="eyebrow">Confirm</p>
+              <h2>{confirmDialog.title}</h2>
+              <p>{confirmDialog.message}</p>
+              {confirmDialog.detail && <div className="confirm-detail">{confirmDialog.detail}</div>}
+            </div>
+            <div className="form-actions">
+              <button className="secondary-button" type="button" onClick={() => setConfirmDialog(null)}>
+                {t.cancel}
+              </button>
+              <button
+                className="primary-button danger-confirm-button"
+                type="button"
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  void action();
+                }}
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                {confirmDialog.confirmLabel}
+              </button>
             </div>
           </section>
         </div>
