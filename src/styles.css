@@ -873,9 +873,11 @@ textarea:focus,
 
 .question-card__main {
   display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 6px;
   align-content: start;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   border: 0;
   padding: 13px 14px;
@@ -886,9 +888,12 @@ textarea:focus,
 
 .card-kicker,
 .meta-line {
+  overflow: hidden;
   color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fallback-chip {
@@ -928,7 +933,7 @@ textarea:focus,
   overflow: hidden;
   color: var(--text);
   font-size: 1.02rem;
-  line-height: 1.28;
+  line-height: 1.24;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
@@ -938,9 +943,9 @@ textarea:focus,
   margin: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  line-height: 1.48;
+  line-height: 1.42;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .question-card .star-button {
