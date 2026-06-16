@@ -66,6 +66,7 @@ const emptyCategoryDraft: CategoryDraft = {
 
 type ExportScope = "all" | "category" | "page" | "selected";
 type QuestionSortOrder = "newest" | "oldest";
+type MissingLanguageFilter = Language | null;
 type ConfirmDialog = {
   confirmLabel: string;
   detail?: string;
@@ -102,6 +103,10 @@ function sortQuestionsByTime(questions: InterviewQuestion[], order: QuestionSort
   });
 }
 
+function isMissingLanguage(question: InterviewQuestion, language: Language) {
+  return !question.question[language].trim() || !question.answer[language].trim();
+}
+
 function updateLocalizedValue(
   draft: QuestionDraft,
   field: "answer" | "question",
@@ -132,6 +137,7 @@ const translations: Record<Language, Record<string, string>> = {
     categoryName: "Category name",
     categoryRequired: "Category name is required",
     clearSelection: "Clear",
+    clearFilter: "Clear filter",
     create: "Create",
     deleteCategory: "Delete category",
     deleteCategoryConfirm: "Delete this category?",
@@ -183,6 +189,8 @@ const translations: Record<Language, Record<string, string>> = {
     selectQuestion: "Select a question",
     selectPage: "Select page",
     answerWillAppear: "The answer will appear here.",
+    showingMissingEnglish: "Showing questions missing English",
+    showingMissingVietnamese: "Showing questions missing Vietnamese",
     showAll: "Show all",
     showLess: "Show less",
     sortNewest: "Newest",
@@ -205,6 +213,7 @@ const translations: Record<Language, Record<string, string>> = {
     categoryName: "Tên danh mục",
     categoryRequired: "Tên danh mục là bắt buộc",
     clearSelection: "Bỏ chọn",
+    clearFilter: "Bỏ lọc",
     create: "Tạo mới",
     deleteCategory: "Xóa danh mục",
     deleteCategoryConfirm: "Xóa danh mục này?",
@@ -256,6 +265,8 @@ const translations: Record<Language, Record<string, string>> = {
     selectQuestion: "Chọn một câu hỏi",
     selectPage: "Chọn trang",
     answerWillAppear: "Câu trả lời sẽ hiển thị ở đây.",
+    showingMissingEnglish: "Đang lọc câu thiếu tiếng Anh",
+    showingMissingVietnamese: "Đang lọc câu thiếu tiếng Việt",
     showAll: "Hiện tất cả",
     showLess: "Thu gọn",
     sortNewest: "Mới nhất",
@@ -500,6 +511,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteIds());
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
+  const [missingLanguageFilter, setMissingLanguageFilter] = useState<MissingLanguageFilter>(null);
   const [questionSortOrder, setQuestionSortOrder] = useState<QuestionSortOrder>("oldest");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -622,14 +634,15 @@ export default function App() {
     const matchedQuestions = questions.filter((item) => {
       const inSelectedCategory =
         selectedCategoryId === ALL_CATEGORIES_ID || item.categoryId === selectedCategoryId;
+      const matchesMissingLanguage = !missingLanguageFilter || isMissingLanguage(item, missingLanguageFilter);
       const matchesSearch =
         !keyword || localizedSearchText(item.question, item.answer).toLowerCase().includes(keyword);
 
-      return inSelectedCategory && matchesSearch;
+      return inSelectedCategory && matchesMissingLanguage && matchesSearch;
     });
 
     return sortQuestionsByTime(matchedQuestions, questionSortOrder);
-  }, [questionSortOrder, questions, search, selectedCategoryId]);
+  }, [missingLanguageFilter, questionSortOrder, questions, search, selectedCategoryId]);
 
   const selectedQuestion =
     filteredQuestions.find((item) => item.id === selectedId) ?? filteredQuestions[0] ?? null;
@@ -646,8 +659,8 @@ export default function App() {
     pagedQuestionIds.length > 0 && pagedQuestionIds.every((questionId) => selectedQuestionIds.has(questionId));
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
-  const missingEnglishQuestions = questions.filter((item) => !item.question.en.trim() || !item.answer.en.trim()).length;
-  const missingVietnameseQuestions = questions.filter((item) => !item.question.vi.trim() || !item.answer.vi.trim()).length;
+  const missingEnglishQuestions = questions.filter((item) => isMissingLanguage(item, "en")).length;
+  const missingVietnameseQuestions = questions.filter((item) => isMissingLanguage(item, "vi")).length;
   const parsedBulkQuestions = useMemo(() => parseBulkQuestions(bulkImportText), [bulkImportText]);
   const bulkImportPlan = useMemo(() => {
     const questionById = new Map(questions.map((item) => [item.id, item]));
@@ -678,6 +691,13 @@ export default function App() {
   }, [bulkImportLanguage, parsedBulkQuestions, questions]);
   const hasBulkImportErrors = bulkImportPlan.missingIds.length > 0;
   const hasSearch = search.trim().length > 0;
+  const hasActiveFilter = hasSearch || Boolean(missingLanguageFilter);
+  const missingFilterLabel =
+    missingLanguageFilter === "en"
+      ? t.showingMissingEnglish
+      : missingLanguageFilter === "vi"
+        ? t.showingMissingVietnamese
+        : "";
   const activeCategoryName =
     selectedCategoryId === ALL_CATEGORIES_ID
       ? t.allCategories
@@ -711,7 +731,7 @@ export default function App() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [questionSortOrder, search, selectedCategoryId]);
+  }, [missingLanguageFilter, questionSortOrder, search, selectedCategoryId]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1263,14 +1283,22 @@ export default function App() {
           <span>{favoriteQuestions}</span>
           <p>{t.favorites}</p>
         </div>
-        <div className="summary-item">
+        <button
+          className={missingLanguageFilter === "en" ? "summary-item summary-button active" : "summary-item summary-button"}
+          type="button"
+          onClick={() => setMissingLanguageFilter((current) => (current === "en" ? null : "en"))}
+        >
           <span>{missingEnglishQuestions}</span>
           <p>{t.missingEnglish}</p>
-        </div>
-        <div className="summary-item">
+        </button>
+        <button
+          className={missingLanguageFilter === "vi" ? "summary-item summary-button active" : "summary-item summary-button"}
+          type="button"
+          onClick={() => setMissingLanguageFilter((current) => (current === "vi" ? null : "vi"))}
+        >
           <span>{missingVietnameseQuestions}</span>
           <p>{t.missingVietnamese}</p>
-        </div>
+        </button>
       </section>
 
       <section className="toolbar simple-toolbar" aria-label="Search">
@@ -1283,8 +1311,19 @@ export default function App() {
           />
         </div>
 
-        {hasSearch && (
-          <button className="icon-button" type="button" onClick={() => setSearch("")} title="Clear search">
+        {missingLanguageFilter && <span className="active-filter-chip">{missingFilterLabel}</span>}
+
+        {hasActiveFilter && (
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setMissingLanguageFilter(null);
+            }}
+            title={t.clearFilter}
+            aria-label={t.clearFilter}
+          >
             <X size={18} aria-hidden="true" />
           </button>
         )}
