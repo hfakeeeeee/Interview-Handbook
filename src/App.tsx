@@ -63,6 +63,7 @@ const emptyCategoryDraft: CategoryDraft = {
 };
 
 type ExportScope = "all" | "category" | "page" | "selected";
+type QuestionSortOrder = "newest" | "oldest";
 type ImportedQuestion = {
   id?: string;
   question?: string;
@@ -73,6 +74,23 @@ type ImportedQuestion = {
 
 function sortCategories(categories: Category[]) {
   return [...categories].sort((first, second) => first.name.localeCompare(second.name));
+}
+
+function getQuestionTime(question: InterviewQuestion) {
+  const timestamp = Date.parse(question.createdAt ?? "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortQuestionsByTime(questions: InterviewQuestion[], order: QuestionSortOrder) {
+  return [...questions].sort((first, second) => {
+    const timeDiff = getQuestionTime(first) - getQuestionTime(second);
+
+    if (timeDiff !== 0) {
+      return order === "oldest" ? timeDiff : -timeDiff;
+    }
+
+    return first.id.localeCompare(second.id);
+  });
 }
 
 function updateLocalizedValue(
@@ -151,6 +169,8 @@ const translations: Record<Language, Record<string, string>> = {
     answerWillAppear: "The answer will appear here.",
     showAll: "Show all",
     showLess: "Show less",
+    sortNewest: "Newest first",
+    sortOldest: "Oldest first",
     updateCategory: "Update category",
     updateQuestion: "Update question",
     visibleQuestions: "Visible questions",
@@ -215,6 +235,8 @@ const translations: Record<Language, Record<string, string>> = {
     answerWillAppear: "Câu trả lời sẽ hiển thị ở đây.",
     showAll: "Hiện tất cả",
     showLess: "Thu gọn",
+    sortNewest: "Mới nhất trước",
+    sortOldest: "Cũ nhất trước",
     updateCategory: "Cập nhật danh mục",
     updateQuestion: "Cập nhật câu hỏi",
     visibleQuestions: "Câu hỏi hiển thị",
@@ -455,6 +477,7 @@ export default function App() {
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavoriteIds());
   const [search, setSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
+  const [questionSortOrder, setQuestionSortOrder] = useState<QuestionSortOrder>("oldest");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -562,7 +585,7 @@ export default function App() {
   const filteredQuestions = useMemo(() => {
     const keyword = search.trim().toLowerCase();
 
-    return questions.filter((item) => {
+    const matchedQuestions = questions.filter((item) => {
       const inSelectedCategory =
         selectedCategoryId === ALL_CATEGORIES_ID || item.categoryId === selectedCategoryId;
       const matchesSearch =
@@ -570,7 +593,9 @@ export default function App() {
 
       return inSelectedCategory && matchesSearch;
     });
-  }, [questions, search, selectedCategoryId]);
+
+    return sortQuestionsByTime(matchedQuestions, questionSortOrder);
+  }, [questionSortOrder, questions, search, selectedCategoryId]);
 
   const selectedQuestion =
     filteredQuestions.find((item) => item.id === selectedId) ?? filteredQuestions[0] ?? null;
@@ -648,7 +673,7 @@ export default function App() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedCategoryId]);
+  }, [questionSortOrder, search, selectedCategoryId]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1468,9 +1493,20 @@ export default function App() {
               <p className="eyebrow">{activeCategoryName}</p>
               <h2>{t.questions}</h2>
             </div>
-            <span className="match-count">
-              {visibleStart}-{visibleEnd} / {filteredQuestions.length}
-            </span>
+            <div className="question-panel-actions">
+              <select
+                className="sort-select"
+                value={questionSortOrder}
+                onChange={(event) => setQuestionSortOrder(event.target.value as QuestionSortOrder)}
+                aria-label="Sort questions"
+              >
+                <option value="oldest">{t.sortOldest}</option>
+                <option value="newest">{t.sortNewest}</option>
+              </select>
+              <span className="match-count">
+                {visibleStart}-{visibleEnd} / {filteredQuestions.length}
+              </span>
+            </div>
           </div>
 
           {filteredQuestions.length ? (
