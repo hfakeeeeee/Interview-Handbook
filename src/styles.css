@@ -748,6 +748,15 @@ textarea:focus,
   min-height: calc(124px * 10 + 8px * 9);
 }
 
+.question-list.selecting .question-card__main {
+  cursor: pointer;
+}
+
+.question-list.selecting .question-card:hover {
+  border-color: var(--accent-border);
+  background: var(--surface-selected);
+}
+
 .bulk-question-actions {
   display: flex;
   flex-wrap: wrap;

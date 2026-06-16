@@ -1667,7 +1667,7 @@ export default function App() {
                 </div>
               )}
 
-              <div className="question-list">
+              <div className={selectedQuestionCount > 0 ? "question-list selecting" : "question-list"}>
                 {pagedQuestions.map((item) => {
                   const isSelected = selectedQuestion?.id === item.id;
                   const isFavorite = favorites.has(item.id);
@@ -1697,7 +1697,13 @@ export default function App() {
                       <button
                         className="question-card__main"
                         type="button"
-                        onClick={() => setSelectedId(item.id)}
+                        onClick={() => {
+                          if (selectedQuestionCount > 0) {
+                            toggleQuestionSelection(item.id);
+                          } else {
+                            setSelectedId(item.id);
+                          }
+                        }}
                       >
                         <span className="card-kicker">
                           {categoryById.get(item.categoryId) ?? "Uncategorized"}
