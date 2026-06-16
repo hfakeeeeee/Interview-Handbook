@@ -10,6 +10,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  writeBatch,
   type Firestore,
 } from "firebase/firestore";
 import type { Category, CategoryDraft, InterviewQuestion, QuestionDraft } from "../types";
@@ -130,6 +131,30 @@ export async function deleteQuestion(questionId: string) {
   }
 
   await deleteDoc(doc(questionsCollection(), questionId));
+}
+
+export async function deleteQuestions(questionIds: string[]) {
+  if (!isFirebaseConfigured) {
+    throw new Error("Firebase is not configured.");
+  }
+
+  if (!db || !questionIds.length) {
+    return;
+  }
+
+  const chunks = Array.from({ length: Math.ceil(questionIds.length / 450) }, (_, index) =>
+    questionIds.slice(index * 450, index * 450 + 450),
+  );
+
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const batch = writeBatch(db);
+      chunk.forEach((questionId) => {
+        batch.delete(doc(questionsCollection(), questionId));
+      });
+      await batch.commit();
+    }),
+  );
 }
 
 export async function createCategory(draft: CategoryDraft) {

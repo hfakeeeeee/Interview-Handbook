@@ -30,6 +30,7 @@ import {
   loadLocalQuestions,
   deleteLocalCategory,
   deleteLocalQuestion,
+  deleteLocalQuestions,
   saveFavoriteIds,
   saveLocalCategory,
   saveLocalQuestion,
@@ -123,9 +124,13 @@ const translations: Record<Language, Record<string, string>> = {
     category: "Category",
     categoryName: "Category name",
     categoryRequired: "Category name is required",
+    clearSelection: "Clear",
     create: "Create",
-    deleteCategoryConfirm: "Delete category",
+    deleteCategoryConfirm: "Delete this category?",
+    deleteCategoryWithQuestionsConfirm: "Delete this category and all questions inside it?",
     deleteQuestionConfirm: "Delete this question? This action cannot be undone.",
+    deleteSelected: "Delete selected",
+    deleteSelectedConfirm: "Delete selected questions? This action cannot be undone.",
     detected: "detected",
     edit: "Edit",
     editCategory: "Edit category",
@@ -167,6 +172,7 @@ const translations: Record<Language, Record<string, string>> = {
     selectCategory: "Select category",
     selectedFallback: "This entry is shown in the available language.",
     selectQuestion: "Select a question",
+    selectPage: "Select page",
     answerWillAppear: "The answer will appear here.",
     showAll: "Show all",
     showLess: "Show less",
@@ -189,9 +195,13 @@ const translations: Record<Language, Record<string, string>> = {
     category: "Danh mục",
     categoryName: "Tên danh mục",
     categoryRequired: "Tên danh mục là bắt buộc",
+    clearSelection: "Bỏ chọn",
     create: "Tạo mới",
-    deleteCategoryConfirm: "Xóa danh mục",
+    deleteCategoryConfirm: "Xóa danh mục này?",
+    deleteCategoryWithQuestionsConfirm: "Xóa danh mục này và toàn bộ câu hỏi bên trong?",
     deleteQuestionConfirm: "Xóa câu hỏi này? Hành động này không thể hoàn tác.",
+    deleteSelected: "Xóa đã chọn",
+    deleteSelectedConfirm: "Xóa các câu hỏi đã chọn? Hành động này không thể hoàn tác.",
     detected: "được nhận diện",
     edit: "Chỉnh sửa",
     editCategory: "Chỉnh sửa danh mục",
@@ -233,6 +243,7 @@ const translations: Record<Language, Record<string, string>> = {
     selectCategory: "Chọn danh mục",
     selectedFallback: "Mục này đang hiển thị bằng ngôn ngữ có sẵn.",
     selectQuestion: "Chọn một câu hỏi",
+    selectPage: "Chọn trang",
     answerWillAppear: "Câu trả lời sẽ hiển thị ở đây.",
     showAll: "Hiện tất cả",
     showLess: "Thu gọn",
@@ -483,6 +494,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(() => new Set());
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
   const [showExportForm, setShowExportForm] = useState(false);
@@ -573,6 +585,14 @@ export default function App() {
     }
   }, [categories, selectedCategoryId]);
 
+  useEffect(() => {
+    const availableQuestionIds = new Set(questions.map((item) => item.id));
+    setSelectedQuestionIds((current) => {
+      const next = new Set([...current].filter((questionId) => availableQuestionIds.has(questionId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [questions]);
+
   const categoryById = useMemo(() => {
     return new Map(categories.map((item) => [item.id, item.name]));
   }, [categories]);
@@ -608,6 +628,10 @@ export default function App() {
   const pagedQuestions = filteredQuestions.slice(pageStartIndex, pageStartIndex + QUESTIONS_PER_PAGE);
   const visibleStart = filteredQuestions.length ? pageStartIndex + 1 : 0;
   const visibleEnd = Math.min(pageStartIndex + QUESTIONS_PER_PAGE, filteredQuestions.length);
+  const pagedQuestionIds = useMemo(() => pagedQuestions.map((item) => item.id), [pagedQuestions]);
+  const selectedQuestionCount = selectedQuestionIds.size;
+  const isPageSelected =
+    pagedQuestionIds.length > 0 && pagedQuestionIds.every((questionId) => selectedQuestionIds.has(questionId));
 
   const favoriteQuestions = questions.filter((item) => favorites.has(item.id)).length;
   const missingEnglishQuestions = questions.filter((item) => !item.question.en.trim() || !item.answer.en.trim()).length;
@@ -855,6 +879,66 @@ export default function App() {
     });
   }
 
+  function toggleQuestionSelection(questionId: string) {
+    setSelectedQuestionIds((current) => {
+      const next = new Set(current);
+      if (next.has(questionId)) {
+        next.delete(questionId);
+      } else {
+        next.add(questionId);
+      }
+      return next;
+    });
+  }
+
+  function togglePageSelection() {
+    setSelectedQuestionIds((current) => {
+      const next = new Set(current);
+      if (isPageSelected) {
+        pagedQuestionIds.forEach((questionId) => next.delete(questionId));
+      } else {
+        pagedQuestionIds.forEach((questionId) => next.add(questionId));
+      }
+      return next;
+    });
+  }
+
+  function clearQuestionSelection() {
+    setSelectedQuestionIds(new Set());
+  }
+
+  async function handleDeleteSelectedQuestions() {
+    const questionIds = [...selectedQuestionIds];
+
+    if (!questionIds.length) {
+      return;
+    }
+
+    const confirmed = window.confirm(`${t.deleteSelectedConfirm}\n\n${questionIds.length} ${t.questions}`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    if (isFirebaseConfigured) {
+      const { deleteQuestions } = await import("./lib/firebase");
+      await deleteQuestions(questionIds);
+      setStatus(`Deleted ${questionIds.length} questions from Firestore`);
+    } else {
+      deleteLocalQuestions(questionIds);
+      setQuestions(loadLocalQuestions());
+      setStatus(`Deleted ${questionIds.length} questions locally`);
+    }
+
+    setFavorites((current) => {
+      const next = new Set(current);
+      questionIds.forEach((questionId) => next.delete(questionId));
+      return next;
+    });
+    setSelectedQuestionIds(new Set());
+    setSelectedId(null);
+  }
+
   async function handleDeleteQuestion(question: InterviewQuestion) {
     const confirmed = window.confirm(t.deleteQuestionConfirm);
 
@@ -873,6 +957,11 @@ export default function App() {
     }
 
     setFavorites((current) => {
+      const next = new Set(current);
+      next.delete(question.id);
+      return next;
+    });
+    setSelectedQuestionIds((current) => {
       const next = new Set(current);
       next.delete(question.id);
       return next;
@@ -900,32 +989,46 @@ export default function App() {
   }
 
   async function handleDeleteCategory(category: Category) {
-    const questionCount = questionsByCategory[category.id] ?? 0;
+    const categoryQuestionIds = questions.filter((question) => question.categoryId === category.id).map((question) => question.id);
+    const questionCount = categoryQuestionIds.length;
 
-    if (questionCount > 0) {
-      setStatus("Cannot delete category that still has questions");
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete category "${category.name}"?`);
+    const confirmMessage = questionCount
+      ? `${t.deleteCategoryWithQuestionsConfirm}\n\n${category.name}: ${questionCount} ${t.questions}`
+      : `${t.deleteCategoryConfirm}\n\n${category.name}`;
+    const confirmed = window.confirm(confirmMessage);
 
     if (!confirmed) {
       return;
     }
 
     if (isFirebaseConfigured) {
-      const { deleteCategory } = await import("./lib/firebase");
+      const { deleteCategory, deleteQuestions } = await import("./lib/firebase");
+      await deleteQuestions(categoryQuestionIds);
       await deleteCategory(category.id);
-      setStatus("Deleted category from Firestore");
+      setStatus(`Deleted category and ${questionCount} questions from Firestore`);
     } else {
+      deleteLocalQuestions(categoryQuestionIds);
       deleteLocalCategory(category.id);
       setCategories(sortCategories(loadLocalCategories()));
+      setQuestions(loadLocalQuestions());
       setStatus("Deleted category locally");
     }
 
     if (selectedCategoryId === category.id) {
       setSelectedCategoryId(ALL_CATEGORIES_ID);
     }
+
+    setFavorites((current) => {
+      const next = new Set(current);
+      categoryQuestionIds.forEach((questionId) => next.delete(questionId));
+      return next;
+    });
+    setSelectedQuestionIds((current) => {
+      const next = new Set(current);
+      categoryQuestionIds.forEach((questionId) => next.delete(questionId));
+      return next;
+    });
+    setSelectedId(null);
   }
 
   function openQuestionForm() {
@@ -1497,7 +1600,7 @@ export default function App() {
                 className="chip-action danger-chip-action"
                 type="button"
                 onClick={() => handleDeleteCategory(item)}
-                title="Delete empty category"
+                title="Delete category"
                 aria-label="Delete category"
               >
                 <Trash2 size={14} aria-hidden="true" />
@@ -1535,23 +1638,62 @@ export default function App() {
               <span className="match-count">
                 {visibleStart}-{visibleEnd} / {filteredQuestions.length}
               </span>
+              <button
+                className="icon-button select-page-button"
+                type="button"
+                onClick={togglePageSelection}
+                title={isPageSelected ? t.clearSelection : t.selectPage}
+                aria-label={isPageSelected ? t.clearSelection : t.selectPage}
+              >
+                <CheckCircle2 size={17} aria-hidden="true" />
+              </button>
             </div>
           </div>
 
           {filteredQuestions.length ? (
             <>
+              {selectedQuestionCount > 0 && (
+                <div className="bulk-question-actions">
+                  <span>
+                    {selectedQuestionCount} {t.questions}
+                  </span>
+                  <button className="secondary-button compact-action" type="button" onClick={clearQuestionSelection}>
+                    {t.clearSelection}
+                  </button>
+                  <button className="secondary-button compact-action danger-button" type="button" onClick={handleDeleteSelectedQuestions}>
+                    <Trash2 size={15} aria-hidden="true" />
+                    {t.deleteSelected}
+                  </button>
+                </div>
+              )}
+
               <div className="question-list">
                 {pagedQuestions.map((item) => {
                   const isSelected = selectedQuestion?.id === item.id;
                   const isFavorite = favorites.has(item.id);
+                  const isChecked = selectedQuestionIds.has(item.id);
                   const questionDisplay = getLocalizedText(item.question, language);
                   const answerDisplay = getLocalizedText(item.answer, language);
 
                   return (
                     <article
-                      className={isSelected ? "question-card selected" : "question-card"}
+                      className={[
+                        "question-card",
+                        isSelected ? "selected" : "",
+                        isChecked ? "checked" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       key={item.id}
                     >
+                      <label className="question-select-checkbox" aria-label="Select question">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleQuestionSelection(item.id)}
+                        />
+                      </label>
+
                       <button
                         className="question-card__main"
                         type="button"

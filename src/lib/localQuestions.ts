@@ -124,6 +124,12 @@ export function deleteLocalQuestion(questionId: string) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }
 
+export function deleteLocalQuestions(questionIds: string[]) {
+  const ids = new Set(questionIds);
+  const updated = loadLocalQuestions().filter((item) => !ids.has(item.id));
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+}
+
 const FAVORITES_KEY = "interview-handbook.favorite-ids";
 
 export function loadFavoriteIds() {
