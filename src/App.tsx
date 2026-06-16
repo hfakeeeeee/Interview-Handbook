@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Copy,
   Database,
+  Eye,
   FileQuestion,
   Folder,
   FolderPlus,
@@ -74,6 +75,11 @@ type ConfirmDialog = {
   onConfirm: () => Promise<void> | void;
   title: string;
 };
+type DuplicateImportMatch = {
+  existingId: string;
+  importIndex: number;
+  question: string;
+};
 type ImportedQuestion = {
   id?: string;
   question?: string;
@@ -107,6 +113,74 @@ function isMissingLanguage(question: InterviewQuestion, language: Language) {
   return !question.question[language].trim() || !question.answer[language].trim();
 }
 
+function normalizeDuplicateText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[`*_#[\]()>~|{}:;,.!?/\\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function textSimilarity(first: string, second: string) {
+  const firstTokens = new Set(normalizeDuplicateText(first).split(" ").filter(Boolean));
+  const secondTokens = new Set(normalizeDuplicateText(second).split(" ").filter(Boolean));
+
+  if (!firstTokens.size || !secondTokens.size) {
+    return 0;
+  }
+
+  const intersection = [...firstTokens].filter((token) => secondTokens.has(token)).length;
+  const union = new Set([...firstTokens, ...secondTokens]).size;
+  return intersection / union;
+}
+
+function getImportedQuestionTexts(item: ImportedQuestion, fallbackLanguage: Language) {
+  const localizedLanguages = languages.filter((language) => item.localizedQuestion?.[language]?.trim());
+
+  if (localizedLanguages.length) {
+    return localizedLanguages.map((language) => item.localizedQuestion?.[language]?.trim() ?? "");
+  }
+
+  return [item.question?.trim() ?? ""].filter(Boolean);
+}
+
+function findDuplicateImportMatches(
+  importedQuestions: ImportedQuestion[],
+  existingQuestions: InterviewQuestion[],
+  fallbackLanguage: Language,
+) {
+  const existingTexts = existingQuestions.flatMap((question) =>
+    languages
+      .map((language) => ({
+        id: question.id,
+        text: question.question[language].trim(),
+      }))
+      .filter((item) => item.text),
+  );
+
+  return importedQuestions.flatMap((item, importIndex): DuplicateImportMatch[] => {
+    const importedTexts = getImportedQuestionTexts(item, fallbackLanguage);
+    const match = importedTexts
+      .flatMap((text) =>
+        existingTexts.map((existing) => ({
+          existingId: existing.id,
+          importIndex,
+          question: text,
+          score:
+            normalizeDuplicateText(text) === normalizeDuplicateText(existing.text)
+              ? 1
+              : textSimilarity(text, existing.text),
+        })),
+      )
+      .filter((item) => item.score >= 0.88)
+      .sort((first, second) => second.score - first.score)[0];
+
+    return match ? [{ existingId: match.existingId, importIndex, question: match.question }] : [];
+  });
+}
+
 function updateLocalizedValue(
   draft: QuestionDraft,
   field: "answer" | "question",
@@ -130,6 +204,7 @@ const translations: Record<Language, Record<string, string>> = {
     addVietnameseVersion: "Add Vietnamese version",
     allCategories: "All categories",
     answer: "Answer",
+    answerHidden: "Answer hidden in review mode.",
     bulkImport: "Bulk import",
     cancel: "Cancel",
     categories: "Categories",
@@ -147,6 +222,8 @@ const translations: Record<Language, Record<string, string>> = {
     deleteSelected: "Delete selected",
     deleteSelectedConfirm: "Delete selected questions? This action cannot be undone.",
     detected: "detected",
+    duplicateQuestions: "Possible duplicates",
+    duplicateQuestionsWarning: "Some new questions look similar to existing questions.",
     edit: "Edit",
     editCategory: "Edit category",
     editQuestion: "Edit question and answer",
@@ -164,6 +241,7 @@ const translations: Record<Language, Record<string, string>> = {
     infoExportTip: "Export prompt helps translate selected questions with AI and paste them back safely.",
     infoGuide: "Guide",
     infoLanguageTip: "Switch EN/VI to review the same question in either language.",
+    infoReviewTip: "Use the eye button in the header to enter Review mode and hide answers until you reveal them.",
     languageEnglish: "English",
     languageVietnamese: "Vietnamese",
     missingEnglish: "Missing English",
@@ -181,6 +259,8 @@ const translations: Record<Language, Record<string, string>> = {
     question: "Question",
     questions: "Questions",
     questionRequired: "Add at least one complete English or Vietnamese question and answer",
+    revealAnswer: "Reveal answer",
+    reviewMode: "Review",
     saveCategory: "Save category",
     saveQuestion: "Save question",
     searchIn: "Search in",
@@ -206,6 +286,7 @@ const translations: Record<Language, Record<string, string>> = {
     addVietnameseVersion: "Thêm bản tiếng Việt",
     allCategories: "Tất cả danh mục",
     answer: "Câu trả lời",
+    answerHidden: "Câu trả lời đang được ẩn trong chế độ ôn tập.",
     bulkImport: "Nhập hàng loạt",
     cancel: "Hủy",
     categories: "Danh mục",
@@ -223,6 +304,8 @@ const translations: Record<Language, Record<string, string>> = {
     deleteSelected: "Xóa đã chọn",
     deleteSelectedConfirm: "Xóa các câu hỏi đã chọn? Hành động này không thể hoàn tác.",
     detected: "được nhận diện",
+    duplicateQuestions: "Có thể bị trùng",
+    duplicateQuestionsWarning: "Một số câu hỏi mới có vẻ giống câu hỏi đã tồn tại.",
     edit: "Chỉnh sửa",
     editCategory: "Chỉnh sửa danh mục",
     editQuestion: "Chỉnh sửa câu hỏi và câu trả lời",
@@ -240,6 +323,7 @@ const translations: Record<Language, Record<string, string>> = {
     infoExportTip: "Xuất prompt giúp dịch các câu đã chọn bằng AI và nhập ngược lại an toàn.",
     infoGuide: "Hướng dẫn",
     infoLanguageTip: "Chuyển EN/VI để xem cùng một câu hỏi ở từng ngôn ngữ.",
+    infoReviewTip: "Dùng nút hình con mắt trên header để bật chế độ ôn tập và ẩn đáp án cho tới khi bạn mở ra.",
     languageEnglish: "Tiếng Anh",
     languageVietnamese: "Tiếng Việt",
     missingEnglish: "Thiếu tiếng Anh",
@@ -257,6 +341,8 @@ const translations: Record<Language, Record<string, string>> = {
     question: "Câu hỏi",
     questions: "Câu hỏi",
     questionRequired: "Thêm ít nhất một cặp câu hỏi và câu trả lời tiếng Anh hoặc tiếng Việt",
+    revealAnswer: "Hiện câu trả lời",
+    reviewMode: "Ôn tập",
     saveCategory: "Lưu danh mục",
     saveQuestion: "Lưu câu hỏi",
     searchIn: "Tìm trong",
@@ -513,6 +599,8 @@ export default function App() {
   const [selectedCategoryId, setSelectedCategoryId] = useState(ALL_CATEGORIES_ID);
   const [missingLanguageFilter, setMissingLanguageFilter] = useState<MissingLanguageFilter>(null);
   const [questionSortOrder, setQuestionSortOrder] = useState<QuestionSortOrder>("oldest");
+  const [isReviewMode, setIsReviewMode] = useState(false);
+  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
@@ -682,14 +770,16 @@ export default function App() {
         },
       ];
     });
+    const duplicateMatches = findDuplicateImportMatches(newQuestions, questions, bulkImportLanguage);
 
     return {
+      duplicateMatches,
       missingIds,
       newQuestions,
       updates,
     };
   }, [bulkImportLanguage, parsedBulkQuestions, questions]);
-  const hasBulkImportErrors = bulkImportPlan.missingIds.length > 0;
+  const hasBulkImportErrors = bulkImportPlan.missingIds.length > 0 || bulkImportPlan.duplicateMatches.length > 0;
   const hasSearch = search.trim().length > 0;
   const hasActiveFilter = hasSearch || Boolean(missingLanguageFilter);
   const missingFilterLabel =
@@ -704,6 +794,7 @@ export default function App() {
       : categoryById.get(selectedCategoryId) ?? "Uncategorized";
   const selectedQuestionDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.question, language) : null;
   const selectedAnswerDisplay = selectedQuestion ? getLocalizedText(selectedQuestion.answer, language) : null;
+  const isReviewAnswerHidden = isReviewMode && !isAnswerRevealed;
   const exportQuestions = useMemo(() => {
     switch (exportScope) {
       case "all":
@@ -732,6 +823,10 @@ export default function App() {
   useEffect(() => {
     setCurrentPage(1);
   }, [missingLanguageFilter, questionSortOrder, search, selectedCategoryId]);
+
+  useEffect(() => {
+    setIsAnswerRevealed(false);
+  }, [isReviewMode, language, selectedQuestion?.id]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -864,6 +959,11 @@ export default function App() {
 
     if (bulkImportPlan.missingIds.length) {
       setStatus(`Could not find ${bulkImportPlan.missingIds.length} question IDs from the import`);
+      return;
+    }
+
+    if (bulkImportPlan.duplicateMatches.length) {
+      setStatus(`${bulkImportPlan.duplicateMatches.length} possible duplicate questions found`);
       return;
     }
 
@@ -1150,6 +1250,15 @@ export default function App() {
             <Info size={18} aria-hidden="true" />
           </button>
           <button
+            className={isReviewMode ? "icon-button review-toggle active" : "icon-button review-toggle"}
+            type="button"
+            onClick={() => setIsReviewMode((current) => !current)}
+            title={t.reviewMode}
+            aria-label={t.reviewMode}
+          >
+            <Eye size={18} aria-hidden="true" />
+          </button>
+          <button
             className="icon-button"
             type="button"
             onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
@@ -1223,6 +1332,7 @@ export default function App() {
               <ul>
                 <li>{t.infoCategoryTip}</li>
                 <li>{t.infoLanguageTip}</li>
+                <li>{t.infoReviewTip}</li>
                 <li>{t.infoBulkTip}</li>
                 <li>{t.infoExportTip}</li>
               </ul>
@@ -1469,7 +1579,7 @@ export default function App() {
       {showBulkImportForm && (
         <div className="modal-backdrop" role="presentation" onMouseDown={closeBulkImportForm}>
           <section
-            className="modal-panel"
+            className="modal-panel bulk-import-modal"
             aria-label="Bulk import questions"
             aria-modal="true"
             role="dialog"
@@ -1485,8 +1595,8 @@ export default function App() {
               </button>
             </div>
 
-            <form className="question-form" onSubmit={handleBulkImportSubmit}>
-              <div className="export-grid">
+            <form className="question-form bulk-import-form" onSubmit={handleBulkImportSubmit}>
+              <div className="bulk-import-controls">
                 <label>
                   {t.category}
                   <select
@@ -1514,7 +1624,7 @@ export default function App() {
                 </label>
               </div>
 
-              <label>
+              <label className="bulk-import-textarea">
                 {t.questions}
                 <textarea
                   value={bulkImportText}
@@ -1522,37 +1632,55 @@ export default function App() {
                   rows={16}
                   placeholder={[
                     "ID: optional-existing-question-id",
-                    "EN Q: What is Java?",
-                    "EN A: Java is a programming language...",
-                    "VI Q: Java là gì?",
-                    "VI A: Java là một ngôn ngữ lập trình...",
+                    "EN Q: What is JVM?",
+                    "EN A: JVM runs Java bytecode.",
+                    "",
+                    "VI Q: JVM là gì?",
+                    "VI A: JVM chạy Java bytecode.",
                     "",
                     "---",
-                    "",
-                    "EN Q: What is JVM?",
-                    "EN A: JVM runs bytecode and manages the runtime...",
-                    "VI Q: JVM là gì?",
-                    "VI A: JVM chạy bytecode và quản lý runtime...",
                   ].join("\n")}
                 />
               </label>
 
               <div className="bulk-import-meta">
-                <span className="import-pill">
-                  {parsedBulkQuestions.length}{" "}
-                  {parsedBulkQuestions.length === 1 ? t.question : t.questions} {t.detected}
+                <span className="import-stat">
+                  <strong>{parsedBulkQuestions.length}</strong>
+                  <small>{parsedBulkQuestions.length === 1 ? t.question : t.questions} {t.detected}</small>
                 </span>
-                <span className="import-pill create">{bulkImportPlan.newQuestions.length} create</span>
-                <span className="import-pill update">{bulkImportPlan.updates.length} update</span>
-                <span className={hasBulkImportErrors ? "import-pill danger" : "import-pill"}>
-                  {bulkImportPlan.missingIds.length} missing ID
+                <span className="import-stat create">
+                  <strong>{bulkImportPlan.newQuestions.length}</strong>
+                  <small>create</small>
+                </span>
+                <span className="import-stat update">
+                  <strong>{bulkImportPlan.updates.length}</strong>
+                  <small>update</small>
+                </span>
+                <span className={bulkImportPlan.missingIds.length ? "import-stat danger" : "import-stat"}>
+                  <strong>{bulkImportPlan.missingIds.length}</strong>
+                  <small>missing ID</small>
+                </span>
+                <span className={bulkImportPlan.duplicateMatches.length ? "import-stat danger" : "import-stat"}>
+                  <strong>{bulkImportPlan.duplicateMatches.length}</strong>
+                  <small>duplicate</small>
                 </span>
               </div>
 
               {hasBulkImportErrors && (
                 <p className="form-warning">
-                  {bulkImportPlan.missingIds.length} imported IDs do not match existing questions.
+                  {bulkImportPlan.missingIds.length
+                    ? `${bulkImportPlan.missingIds.length} imported IDs do not match existing questions.`
+                    : t.duplicateQuestionsWarning}
                 </p>
+              )}
+
+              {bulkImportPlan.duplicateMatches.length > 0 && (
+                <div className="duplicate-preview">
+                  <strong>{t.duplicateQuestions}</strong>
+                  {bulkImportPlan.duplicateMatches.slice(0, 3).map((item) => (
+                    <span key={`${item.importIndex}-${item.existingId}`}>{item.question}</span>
+                  ))}
+                </div>
               )}
 
               <div className="form-actions">
@@ -1804,7 +1932,7 @@ export default function App() {
                           {categoryById.get(item.categoryId) ?? "Uncategorized"}
                         </span>
                         <h3>{questionDisplay.text}</h3>
-                        <p>{answerDisplay.text}</p>
+                        <p>{isReviewMode ? t.answerHidden : answerDisplay.text}</p>
                         {(questionDisplay.fallbackLanguage || answerDisplay.fallbackLanguage) && (
                           <span className="fallback-chip">
                             {questionDisplay.fallbackLanguage === "en" || answerDisplay.fallbackLanguage === "en"
@@ -1956,7 +2084,17 @@ export default function App() {
                   <CheckCircle2 size={18} aria-hidden="true" />
                   {t.answer}
                 </div>
-                <MarkdownContent value={selectedAnswerDisplay?.text ?? ""} />
+                {isReviewAnswerHidden ? (
+                  <div className="review-hidden-panel">
+                    <p>{t.answerHidden}</p>
+                    <button className="primary-button" type="button" onClick={() => setIsAnswerRevealed(true)}>
+                      <Eye size={17} aria-hidden="true" />
+                      {t.revealAnswer}
+                    </button>
+                  </div>
+                ) : (
+                  <MarkdownContent value={selectedAnswerDisplay?.text ?? ""} />
+                )}
               </div>
             </>
           ) : (
