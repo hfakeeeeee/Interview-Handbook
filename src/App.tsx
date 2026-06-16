@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -111,6 +111,14 @@ function sortQuestionsByTime(questions: InterviewQuestion[], order: QuestionSort
 
 function isMissingLanguage(question: InterviewQuestion, language: Language) {
   return !question.question[language].trim() || !question.answer[language].trim();
+}
+
+function isTextInputTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return target.isContentEditable || ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
 }
 
 function normalizeDuplicateText(value: string) {
@@ -242,6 +250,8 @@ const translations: Record<Language, Record<string, string>> = {
     infoGuide: "Guide",
     infoLanguageTip: "Switch EN/VI to review the same question in either language.",
     infoReviewTip: "Use the eye button in the header to enter Review mode and hide answers until you reveal them.",
+    infoShortcutTip:
+      "Keyboard shortcuts: / search, J/K or arrows move between questions, F favorite, E edit, R review, N new question, B bulk import, ? guide, Esc close or clear.",
     languageEnglish: "English",
     languageVietnamese: "Vietnamese",
     missingEnglish: "Missing English",
@@ -324,6 +334,8 @@ const translations: Record<Language, Record<string, string>> = {
     infoGuide: "Hướng dẫn",
     infoLanguageTip: "Chuyển EN/VI để xem cùng một câu hỏi ở từng ngôn ngữ.",
     infoReviewTip: "Dùng nút hình con mắt trên header để bật chế độ ôn tập và ẩn đáp án cho tới khi bạn mở ra.",
+    infoShortcutTip:
+      "Phím tắt: / tìm kiếm, J/K hoặc phím mũi tên để chuyển câu, F yêu thích, E chỉnh sửa, R ôn tập, N tạo câu hỏi, B nhập hàng loạt, ? hướng dẫn, Esc đóng hoặc bỏ lọc.",
     languageEnglish: "Tiếng Anh",
     languageVietnamese: "Tiếng Việt",
     missingEnglish: "Thiếu tiếng Anh",
@@ -636,6 +648,7 @@ export default function App() {
     return storedLanguage === "en" || storedLanguage === "vi" ? storedLanguage : "en";
   });
   const [status, setStatus] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const t = translations[language];
 
   useEffect(() => {
@@ -1211,6 +1224,40 @@ export default function App() {
     setShowBulkImportForm(false);
   }
 
+  function closeActiveOverlay() {
+    if (confirmDialog) {
+      setConfirmDialog(null);
+      return true;
+    }
+
+    if (showQuestionForm) {
+      closeQuestionForm();
+      return true;
+    }
+
+    if (showBulkImportForm) {
+      closeBulkImportForm();
+      return true;
+    }
+
+    if (showExportForm) {
+      setShowExportForm(false);
+      return true;
+    }
+
+    if (showInfoPanel) {
+      setShowInfoPanel(false);
+      return true;
+    }
+
+    if (showCategoryForm) {
+      closeCategoryForm();
+      return true;
+    }
+
+    return false;
+  }
+
   function openExportForm() {
     setExportTargetLanguage(language === "en" ? "vi" : "en");
     setExportScope(selectedQuestion ? "selected" : "page");
@@ -1221,6 +1268,129 @@ export default function App() {
     await navigator.clipboard.writeText(exportPrompt);
     setStatus(`Copied export prompt for ${exportQuestions.length} questions`);
   }
+
+  function selectQuestionByOffset(offset: number) {
+    if (!filteredQuestions.length) {
+      return;
+    }
+
+    const currentIndex = selectedQuestion
+      ? Math.max(0, filteredQuestions.findIndex((item) => item.id === selectedQuestion.id))
+      : 0;
+    const nextIndex = Math.min(filteredQuestions.length - 1, Math.max(0, currentIndex + offset));
+    const nextQuestion = filteredQuestions[nextIndex];
+
+    if (!nextQuestion) {
+      return;
+    }
+
+    setSelectedId(nextQuestion.id);
+    setCurrentPage(Math.floor(nextIndex / QUESTIONS_PER_PAGE) + 1);
+  }
+
+  useEffect(() => {
+    function handleShortcut(event: KeyboardEvent) {
+      const key = event.key.toLowerCase();
+      const isTyping = isTextInputTarget(event.target);
+
+      if (isTyping && key !== "escape") {
+        return;
+      }
+
+      if (key === "escape") {
+        event.preventDefault();
+
+        if (closeActiveOverlay()) {
+          return;
+        }
+
+        if (selectedQuestionCount > 0) {
+          clearQuestionSelection();
+          return;
+        }
+
+        if (search || missingLanguageFilter) {
+          setSearch("");
+          setMissingLanguageFilter(null);
+        }
+
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      const hasOpenOverlay =
+        Boolean(confirmDialog) ||
+        showQuestionForm ||
+        showBulkImportForm ||
+        showExportForm ||
+        showInfoPanel ||
+        showCategoryForm;
+
+      if (hasOpenOverlay) {
+        return;
+      }
+
+      if (key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
+
+      if (key === "j" || key === "arrowdown") {
+        event.preventDefault();
+        selectQuestionByOffset(1);
+        return;
+      }
+
+      if (key === "k" || key === "arrowup") {
+        event.preventDefault();
+        selectQuestionByOffset(-1);
+        return;
+      }
+
+      if (key === "f" && selectedQuestion) {
+        event.preventDefault();
+        toggleFavorite(selectedQuestion.id);
+        return;
+      }
+
+      if (key === "e" && selectedQuestion) {
+        event.preventDefault();
+        openEditQuestionForm(selectedQuestion);
+        return;
+      }
+
+      if (key === "r") {
+        event.preventDefault();
+        setIsReviewMode((current) => !current);
+        return;
+      }
+
+      if (key === "n" && categories.length) {
+        event.preventDefault();
+        openQuestionForm();
+        return;
+      }
+
+      if (key === "b") {
+        event.preventDefault();
+        openBulkImportForm();
+        return;
+      }
+
+      if (event.key === "?") {
+        event.preventDefault();
+        setShowInfoPanel(true);
+      }
+    }
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  });
 
   return (
     <main className="app-shell">
@@ -1333,6 +1503,7 @@ export default function App() {
                 <li>{t.infoCategoryTip}</li>
                 <li>{t.infoLanguageTip}</li>
                 <li>{t.infoReviewTip}</li>
+                <li>{t.infoShortcutTip}</li>
                 <li>{t.infoBulkTip}</li>
                 <li>{t.infoExportTip}</li>
               </ul>
@@ -1415,6 +1586,7 @@ export default function App() {
         <div className="search-box">
           <Search size={18} aria-hidden="true" />
           <input
+            ref={searchInputRef}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={`${t.searchIn} ${activeCategoryName}...`}
