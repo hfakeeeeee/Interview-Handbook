@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  ArrowDownUp,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
@@ -169,8 +170,8 @@ const translations: Record<Language, Record<string, string>> = {
     answerWillAppear: "The answer will appear here.",
     showAll: "Show all",
     showLess: "Show less",
-    sortNewest: "Newest first",
-    sortOldest: "Oldest first",
+    sortNewest: "Newest",
+    sortOldest: "Oldest",
     updateCategory: "Update category",
     updateQuestion: "Update question",
     visibleQuestions: "Visible questions",
@@ -235,8 +236,8 @@ const translations: Record<Language, Record<string, string>> = {
     answerWillAppear: "Câu trả lời sẽ hiển thị ở đây.",
     showAll: "Hiện tất cả",
     showLess: "Thu gọn",
-    sortNewest: "Mới nhất trước",
-    sortOldest: "Cũ nhất trước",
+    sortNewest: "Mới nhất",
+    sortOldest: "Cũ nhất",
     updateCategory: "Cập nhật danh mục",
     updateQuestion: "Cập nhật câu hỏi",
     visibleQuestions: "Câu hỏi hiển thị",
@@ -480,6 +481,7 @@ export default function App() {
   const [questionSortOrder, setQuestionSortOrder] = useState<QuestionSortOrder>("oldest");
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [showBulkImportForm, setShowBulkImportForm] = useState(false);
@@ -680,6 +682,25 @@ export default function App() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setPageInput(String(safeCurrentPage));
+  }, [safeCurrentPage]);
+
+  function handlePageJump(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const requestedPage = Number.parseInt(pageInput, 10);
+
+    if (!Number.isFinite(requestedPage)) {
+      setPageInput(String(safeCurrentPage));
+      return;
+    }
+
+    const nextPage = Math.min(totalPages, Math.max(1, requestedPage));
+    setCurrentPage(nextPage);
+    setPageInput(String(nextPage));
+  }
 
   async function handleCategorySubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1494,15 +1515,23 @@ export default function App() {
               <h2>{t.questions}</h2>
             </div>
             <div className="question-panel-actions">
-              <select
-                className="sort-select"
-                value={questionSortOrder}
-                onChange={(event) => setQuestionSortOrder(event.target.value as QuestionSortOrder)}
-                aria-label="Sort questions"
-              >
-                <option value="oldest">{t.sortOldest}</option>
-                <option value="newest">{t.sortNewest}</option>
-              </select>
+              <div className="sort-toggle" aria-label="Sort questions">
+                <ArrowDownUp size={15} aria-hidden="true" />
+                <button
+                  className={questionSortOrder === "oldest" ? "active" : ""}
+                  type="button"
+                  onClick={() => setQuestionSortOrder("oldest")}
+                >
+                  {t.sortOldest}
+                </button>
+                <button
+                  className={questionSortOrder === "newest" ? "active" : ""}
+                  type="button"
+                  onClick={() => setQuestionSortOrder("newest")}
+                >
+                  {t.sortNewest}
+                </button>
+              </div>
               <span className="match-count">
                 {visibleStart}-{visibleEnd} / {filteredQuestions.length}
               </span>
@@ -1568,9 +1597,23 @@ export default function App() {
                     {t.previous}
                   </button>
 
-                  <span>
-                    {t.page} {safeCurrentPage} / {totalPages}
-                  </span>
+                  <form className="page-jump" onSubmit={handlePageJump}>
+                    <span>{t.page}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      value={pageInput}
+                      onChange={(event) => setPageInput(event.target.value)}
+                      onBlur={() => {
+                        if (!pageInput.trim()) {
+                          setPageInput(String(safeCurrentPage));
+                        }
+                      }}
+                      aria-label="Page number"
+                    />
+                    <span>/ {totalPages}</span>
+                  </form>
 
                   <button
                     className="secondary-button"
